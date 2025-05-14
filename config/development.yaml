@@ -4,6 +4,50 @@
 google_cloud:
   project_id: finflow-hackathon
   region: us-central1
+  location: us-central1
+  
+  # Document AI settings
+  document_ai:
+    processor_id: processor_id_placeholder
+    
+  # BigQuery settings
+  bigquery:
+    dataset_id: finflow_dev
+    
+  # Cloud Storage settings
+  storage:
+    bucket_name: finflow-dev-documents
+
+# Agent settings
+agents:
+  master_orchestrator:
+    model: gemini-2.0-pro
+    temperature: 0.2
+    
+  document_processor:
+    model: gemini-2.0-flash
+    temperature: 0.1
+    
+  validation:
+    model: gemini-2.0-pro
+    temperature: 0.1
+    
+  rule_retrieval:
+    model: gemini-2.0-flash
+    temperature: 0.1
+    
+  storage:
+    model: gemini-2.0-flash
+    temperature: 0.1
+    
+  analytics:
+    model: gemini-2.0-pro
+    temperature: 0.3
+
+# Logging settings
+logging:
+  level: DEBUG
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
   
 # Storage settings
 storage:
