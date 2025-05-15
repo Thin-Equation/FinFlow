@@ -5,7 +5,7 @@ Data models for financial entities in the FinFlow system.
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Optional, Set
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field
 import uuid
 
 from models.documents import Address

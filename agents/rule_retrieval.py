@@ -2,7 +2,6 @@
 Rule retrieval agent for the FinFlow system.
 """
 
-import logging
 from typing import Any, Dict, List
 
 from agents.base_agent import BaseAgent

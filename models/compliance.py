@@ -4,7 +4,7 @@ Data models for compliance rules and validation in the FinFlow system.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 import uuid
 

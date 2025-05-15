@@ -3,7 +3,7 @@ Base data model for all FinFlow models.
 """
 
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from pydantic import BaseModel, Field
 import uuid
 
@@ -15,8 +15,8 @@ class FinFlowModel(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     created_by: Optional[str] = None
     updated_by: Optional[str] = None
-    metadata: Dict = {}
-    
+    metadata: Dict[str, Any] = {}
+
     class Config:
         allow_population_by_field_name = True
         validate_assignment = True

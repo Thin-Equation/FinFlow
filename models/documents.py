@@ -4,8 +4,8 @@ Data models for financial documents in the FinFlow system.
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Union
-from pydantic import BaseModel, Field, validator
+from typing import Dict, List, Optional
+from pydantic import BaseModel, Field, field_validator
 import uuid
 
 
@@ -73,7 +73,7 @@ class LineItem(BaseModel):
     tax_rate: Optional[float] = Field(default=0, ge=0)
     account_code: Optional[str] = None
     
-    @validator('total_amount', pre=True, always=True)
+    @field_validator('total_amount', pre=True, always=True)
     def calculate_total_amount(cls, v, values):
         """Calculate total amount if not provided."""
         if v == 0 and 'quantity' in values and 'unit_price' in values:

@@ -2,26 +2,20 @@
 Utilities for agent-to-agent communication in the FinFlow system.
 """
 
-from typing import Any, Dict, Optional, List
-from google.adk.tools.agent_tool import AgentTool
-from google.adk.tools import ToolContext
+from typing import Any, Dict, List
+from google.adk.tools.agent_tool import AgentTool # type: ignore
 
-def create_agent_tool(agent_name: str, description: str) -> AgentTool:
+def create_agent_tool(agent: Any) -> AgentTool:
     """
     Create an AgentTool for invoking another agent.
     
     Args:
-        agent_name: Name of the agent to create a tool for
-        description: Description of the agent's purpose
+        agent: The agent instance to create a tool for
         
     Returns:
         AgentTool: Tool for invoking the specified agent
     """
-    return AgentTool(
-        name=f"{agent_name}Agent",
-        description=description,
-        agent_name=agent_name
-    )
+    return AgentTool(agent)
 
 def transfer_context(
     source_context: Dict[str, Any], 
@@ -51,17 +45,14 @@ def transfer_context(
     
     return target_context
 
-def create_agent_tools(agent_definitions: List[Dict[str, str]]) -> List[AgentTool]:
+def create_agent_tools(agents: List[Any]) -> List[AgentTool]:
     """
-    Create a list of AgentTools based on provided definitions.
+    Create a list of AgentTools based on provided agent instances.
     
     Args:
-        agent_definitions: List of dictionaries with 'name' and 'description' keys
+        agents: List of agent instances
         
     Returns:
         List[AgentTool]: List of agent tools
     """
-    return [
-        create_agent_tool(agent["name"], agent["description"])
-        for agent in agent_definitions
-    ]
+    return [create_agent_tool(agent) for agent in agents]
