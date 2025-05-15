@@ -53,14 +53,20 @@
   - Added agent hierarchy diagram
   - Updated README with setup instructions
 
-## Next Steps (Days 5-8)
+## Next Steps (Days 5-12)
 
 ### Day 5: Agent Implementation - Master Orchestrator & Document Processor
 - Implement core functionality of MasterOrchestrator
 - Implement Document Processor with Document AI integration
 - Add comprehensive error handling
 
-### Day 6: Agent Implementation - Rule Retrieval & Validation
+### Day 6: Simple Agent Testing ✓
+- Created "Hello World" test case for basic agent functionality
+- Implemented agent initialization and configuration tests
+- Set up ADK CLI for local testing: `adk run`
+- Documented initial agent behavior and capabilities
+
+### Day 7: Agent Implementation - Rule Retrieval & Validation
 - Implement RuleRetrieval agent
 - Implement ValidationAgent with rule checking
 - Create rule templates for common document types

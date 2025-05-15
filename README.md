@@ -11,6 +11,7 @@ FinFlow is an intelligent system that analyzes, processes, and extracts insights
 - Validation against business rules and compliance requirements
 - Structured data storage in BigQuery
 - Financial analytics and insights generation
+- Comprehensive agent testing framework
 
 ## Agent Architecture
 The system consists of several specialized agents:
@@ -77,6 +78,30 @@ Run the unit tests:
 ```bash
 python -m unittest discover tests
 ```
+
+For more comprehensive testing options:
+
+```bash
+# Run tests with pytest
+pytest
+
+# Run Hello World agent test
+pytest tests/test_hello_world_agent.py -v
+
+# Generate test coverage report
+pytest --cov=agents --cov-report=html
+```
+
+For interactive testing with ADK CLI:
+```bash
+# Run the Hello World agent
+./run_hello_world.sh
+
+# Run with debug mode
+./run_hello_world.sh --debug
+```
+
+For detailed testing information, see [Testing Guide](docs/testing_guide.md) and [Initial Agent Testing](docs/initial_agent_testing.md).
 
 ## Configuration
 The system uses environment-specific YAML configuration files:
