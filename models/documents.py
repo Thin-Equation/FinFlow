@@ -4,8 +4,8 @@ Data models for financial documents in the FinFlow system.
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Dict, List, Optional, Any
+from pydantic import BaseModel, Field, field_validator, ValidationInfo
 import uuid
 
 
@@ -73,9 +73,11 @@ class LineItem(BaseModel):
     tax_rate: Optional[float] = Field(default=0, ge=0)
     account_code: Optional[str] = None
     
-    @field_validator('total_amount', pre=True, always=True)
-    def calculate_total_amount(cls, v, values):
+    @field_validator('total_amount')
+    @classmethod
+    def calculate_total_amount(cls, v: float, info: ValidationInfo) -> float:
         """Calculate total amount if not provided."""
+        values = info.data
         if v == 0 and 'quantity' in values and 'unit_price' in values:
             return values['quantity'] * values['unit_price']
         return v
@@ -133,9 +135,11 @@ class FinancialDocument(BaseModel):
     source_file: Optional[str] = None  # Original file path/URI
     confidence_score: Optional[float] = None  # Document AI confidence
     
-    @validator('total_amount', pre=True, always=True)
-    def validate_total_amount(cls, v, values):
+    @field_validator('total_amount')
+    @classmethod
+    def validate_total_amount(cls, v: float, info: ValidationInfo) -> float:
         """Validate that total_amount equals sum of line items if line items exist."""
+        values = info.data
         if v == 0 and 'line_items' in values and values['line_items']:
             return sum(item.total_amount for item in values['line_items'])
         return v
@@ -148,7 +152,7 @@ class Invoice(FinancialDocument):
     """Invoice-specific document model."""
     document_type: DocumentType = DocumentType.INVOICE
     purchase_order_ref: Optional[str] = None
-    shipping_info: Optional[dict] = None
+    shipping_info: Optional[Dict[str, Any]] = None
     payment_instructions: Optional[str] = None
 
 
@@ -177,7 +181,7 @@ class BankStatement(FinancialDocument):
     period_end: datetime
     opening_balance: float
     closing_balance: float
-    transactions: List[Dict] = []
+    transactions: List[Dict[str, Any]] = []
 
 
 class DocumentRelationship(BaseModel):
@@ -187,4 +191,4 @@ class DocumentRelationship(BaseModel):
     target_document_id: str
     relationship_type: str  # e.g., "invoice_to_receipt", "po_to_invoice"
     created_at: datetime = Field(default_factory=datetime.now)
-    metadata: Dict = {}
+    metadata: Dict[str, Any] = {}

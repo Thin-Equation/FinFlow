@@ -2,9 +2,23 @@
 Analytics agent for the FinFlow system.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TypedDict
 
 from agents.base_agent import BaseAgent
+
+class Vendor(TypedDict):
+    name: str
+    amount: float
+
+class MonthlySpending(TypedDict):
+    month: str
+    amount: float
+
+class Insights(TypedDict):
+    top_vendors: List[Vendor]
+    monthly_spending: List[MonthlySpending]
+    anomalies: List[Any]
+    recommendations: List[str]
 
 class AnalyticsAgent(BaseAgent):
     """
@@ -39,7 +53,7 @@ class AnalyticsAgent(BaseAgent):
         # TODO: Implement analytics tools
         pass
     
-    async def generate_insights(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def generate_insights(self, documents: List[Dict[str, Any]]) -> Insights:
         """
         Generate insights from a collection of documents.
         
@@ -53,7 +67,7 @@ class AnalyticsAgent(BaseAgent):
         
         # TODO: Implement insight generation logic
         # This is a stub implementation
-        insights = {
+        insights: Insights = {
             "top_vendors": [
                 {"name": "Vendor A", "amount": 10000.0},
                 {"name": "Vendor B", "amount": 7500.0},

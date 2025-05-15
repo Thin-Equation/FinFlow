@@ -4,7 +4,7 @@ Data models for financial entities in the FinFlow system.
 
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any
 from pydantic import BaseModel, Field
 import uuid
 
@@ -47,7 +47,7 @@ class FinancialEntity(BaseModel):
     
     # Banking information
     payment_methods: List[PaymentMethod] = []
-    bank_accounts: List[Dict] = []
+    bank_accounts: List[Dict[str, Any]] = []
     
     # Classification and metadata
     tags: Set[str] = set()

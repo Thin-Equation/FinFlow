@@ -2,9 +2,19 @@
 Storage agent for the FinFlow system.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypedDict
 
 from agents.base_agent import BaseAgent
+
+class StorageResult(TypedDict):
+    document_id: str
+    status: str
+    timestamp: str
+    
+class Document(TypedDict):
+    document_id: str
+    document_type: str
+    status: str
 
 class StorageAgent(BaseAgent):
     """
@@ -39,7 +49,7 @@ class StorageAgent(BaseAgent):
         # TODO: Implement storage tools
         pass
     
-    async def store_document(self, document: Dict[str, Any]) -> Dict[str, Any]:
+    async def store_document(self, document: Dict[str, Any]) -> StorageResult:
         """
         Store a document in BigQuery.
         
@@ -53,7 +63,7 @@ class StorageAgent(BaseAgent):
         
         # TODO: Implement document storage logic
         # This is a stub implementation
-        result = {
+        result: StorageResult = {
             "document_id": document.get("document_id", "unknown"),
             "status": "stored",
             "timestamp": "2025-05-16T12:00:00Z",
@@ -62,7 +72,7 @@ class StorageAgent(BaseAgent):
         self.logger.info(f"Document stored successfully: {result['document_id']}")
         return result
     
-    async def retrieve_document(self, document_id: str) -> Optional[Dict[str, Any]]:
+    async def retrieve_document(self, document_id: str) -> Optional[Document]:
         """
         Retrieve a document from storage.
         
@@ -76,7 +86,7 @@ class StorageAgent(BaseAgent):
         
         # TODO: Implement document retrieval logic
         # This is a stub implementation
-        document = {
+        document: Document = {
             "document_id": document_id,
             "document_type": "invoice",
             "status": "processed",

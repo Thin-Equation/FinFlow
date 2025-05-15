@@ -2,9 +2,23 @@
 Validation agent for the FinFlow system.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TypedDict
 
 from agents.base_agent import BaseAgent
+
+class ValidationResult(TypedDict):
+    rule_id: str
+    passed: bool
+    message: str
+    severity: str
+
+class ValidationReport(TypedDict):
+    document_id: str
+    passed: bool
+    validation_results: List[ValidationResult]
+    total_rules: int
+    passed_rules: int
+    failed_rules: int
 
 class ValidationAgent(BaseAgent):
     """
@@ -41,7 +55,7 @@ class ValidationAgent(BaseAgent):
     
     async def validate_document(
         self, document: Dict[str, Any], rules: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    ) -> ValidationReport:
         """
         Validate a document against the provided rules.
         
@@ -56,22 +70,27 @@ class ValidationAgent(BaseAgent):
         
         # TODO: Implement validation logic
         # This is a stub implementation
-        validation_results = []
+        validation_results: List[ValidationResult] = []
         for rule in rules:
-            validation_results.append({
+            result: ValidationResult = {
                 "rule_id": rule["rule_id"],
                 "passed": True,  # Placeholder
                 "message": "Validation passed",
                 "severity": rule["severity"]
-            })
+            }
+            validation_results.append(result)
         
-        validation_report = {
+        # Calculate passed and failed rules
+        passed_rules = sum(1 for result in validation_results if result["passed"])
+        failed_rules = len(validation_results) - passed_rules
+        
+        validation_report: ValidationReport = {
             "document_id": document.get("document_id", "unknown"),
             "passed": all(result["passed"] for result in validation_results),
             "validation_results": validation_results,
             "total_rules": len(rules),
-            "passed_rules": sum(1 for result in validation_results if result["passed"]),
-            "failed_rules": sum(1 for result in validation_results if not result["passed"]),
+            "passed_rules": passed_rules,
+            "failed_rules": failed_rules,
         }
         
         self.logger.info(f"Validation completed with {validation_report['passed_rules']} passed rules and {validation_report['failed_rules']} failed rules")

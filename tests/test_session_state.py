@@ -3,8 +3,6 @@ Unit tests for the SessionState class.
 """
 
 import unittest
-import json
-from datetime import datetime
 from typing import Dict, Any
 
 from utils.session_state import SessionState, get_or_create_session_state, update_context_session_state
@@ -12,12 +10,12 @@ from utils.session_state import SessionState, get_or_create_session_state, updat
 class TestSessionState(unittest.TestCase):
     """Test cases for the SessionState class."""
 
-    def setUp(self):
+    def setUp(self) -> None:
         """Set up test fixtures."""
         self.session = SessionState()
         self.context: Dict[str, Any] = {}
 
-    def test_initialization(self):
+    def test_initialization(self) -> None:
         """Test session state initialization."""
         session = SessionState("test-id")
         self.assertEqual(session.session_id, "test-id")
@@ -26,10 +24,10 @@ class TestSessionState(unittest.TestCase):
         # Auto-generated ID should be a UUID string
         default_session = SessionState()
         self.assertIsNotNone(default_session.session_id)
-        self.assertTrue(isinstance(default_session.session_id, str))
+        self.assertIsInstance(default_session.session_id, str)
         self.assertGreater(len(default_session.session_id), 0)
 
-    def test_get_set_methods(self):
+    def test_get_set_methods(self) -> None:
         """Test get and set methods."""
         # Initial state should not have the key
         self.assertIsNone(self.session.get("test_key"))
@@ -39,7 +37,7 @@ class TestSessionState(unittest.TestCase):
         self.session.set("test_key", "test_value")
         self.assertEqual(self.session.get("test_key"), "test_value")
 
-    def test_update_method(self):
+    def test_update_method(self) -> None:
         """Test update method."""
         self.session.update({
             "key1": "value1",
@@ -49,7 +47,7 @@ class TestSessionState(unittest.TestCase):
         self.assertEqual(self.session.get("key1"), "value1")
         self.assertEqual(self.session.get("key2"), "value2")
 
-    def test_delete_method(self):
+    def test_delete_method(self) -> None:
         """Test delete method."""
         self.session.set("test_key", "test_value")
         self.assertEqual(self.session.get("test_key"), "test_value")
@@ -57,7 +55,7 @@ class TestSessionState(unittest.TestCase):
         self.session.delete("test_key")
         self.assertIsNone(self.session.get("test_key"))
 
-    def test_clear_method(self):
+    def test_clear_method(self) -> None:
         """Test clear method."""
         self.session.update({
             "key1": "value1",
@@ -67,7 +65,7 @@ class TestSessionState(unittest.TestCase):
         self.session.clear()
         self.assertEqual(self.session.data, {})
 
-    def test_to_dict_method(self):
+    def test_to_dict_method(self) -> None:
         """Test to_dict method."""
         self.session.set("test_key", "test_value")
         session_dict = self.session.to_dict()
@@ -75,9 +73,9 @@ class TestSessionState(unittest.TestCase):
         self.assertEqual(session_dict["session_id"], self.session.session_id)
         self.assertEqual(session_dict["data"]["test_key"], "test_value")
 
-    def test_from_dict_method(self):
+    def test_from_dict_method(self) -> None:
         """Test from_dict method."""
-        original_dict = {
+        original_dict: Dict[str, Any] = {
             "session_id": "test-session-id",
             "created_at": "2023-01-01T00:00:00",
             "last_updated": "2023-01-01T01:00:00",
@@ -91,13 +89,13 @@ class TestSessionState(unittest.TestCase):
         self.assertEqual(session.last_updated, "2023-01-01T01:00:00")
         self.assertEqual(session.data, {"key": "value"})
 
-    def test_json_serialization(self):
+    def test_json_serialization(self) -> None:
         """Test JSON serialization and deserialization."""
         self.session.set("test_key", "test_value")
         
         # Serialize to JSON
         json_str = self.session.to_json()
-        self.assertTrue(isinstance(json_str, str))
+        self.assertIsInstance(json_str, str)
         
         # Deserialize from JSON
         new_session = SessionState.from_json(json_str)
@@ -106,12 +104,12 @@ class TestSessionState(unittest.TestCase):
         self.assertEqual(new_session.session_id, self.session.session_id)
         self.assertEqual(new_session.data, self.session.data)
 
-    def test_get_or_create_session_state(self):
+    def test_get_or_create_session_state(self) -> None:
         """Test get_or_create_session_state function."""
         # Empty context
         session1 = get_or_create_session_state(self.context)
         self.assertIsNotNone(session1)
-        self.assertTrue(isinstance(session1, SessionState))
+        self.assertIsInstance(session1, SessionState)
         
         # Context already has session_state
         session_dict = self.session.to_dict()
@@ -120,7 +118,7 @@ class TestSessionState(unittest.TestCase):
         session2 = get_or_create_session_state(self.context)
         self.assertEqual(session2.session_id, self.session.session_id)
 
-    def test_update_context_session_state(self):
+    def test_update_context_session_state(self) -> None:
         """Test update_context_session_state function."""
         session = SessionState("test-session")
         session.set("test_key", "test_value")
