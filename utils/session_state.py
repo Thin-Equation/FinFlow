@@ -2,7 +2,7 @@
 Session state management utilities for the FinFlow system.
 """
 
-from typing import Any, Dict, Optional, TypeVar, cast
+from typing import Any, Dict, List, Optional, Set, TypeVar, cast
 import json
 import uuid
 from datetime import datetime
@@ -25,6 +25,8 @@ class SessionState:
         self.created_at: str = datetime.now().isoformat()
         self.last_updated: str = self.created_at
         self.data: Dict[str, Any] = {}
+        self.agent_data: Dict[str, Dict[str, Any]] = {}  # Agent-specific data compartments
+        self.shared_keys: Set[str] = set()  # Keys that are shared between agents
         
     def get(self, key: str, default: Any = None) -> Any:
         """
@@ -32,8 +34,6 @@ class SessionState:
         
         Args:
             key: Data key
-            default: Default value if key doesn't exist
-            
         Returns:
             Value associated with key or default
         """
@@ -87,7 +87,9 @@ class SessionState:
             "session_id": self.session_id,
             "created_at": self.created_at,
             "last_updated": self.last_updated,
-            "data": self.data
+            "data": self.data,
+            "agent_data": self.agent_data,
+            "shared_keys": list(self.shared_keys)
         }
     
     @classmethod
@@ -149,6 +151,51 @@ class SessionState:
             except Exception:
                 # On any error, use empty dict (already initialized above)
                 pass
+        
+        # Handle agent_data
+        session.agent_data = {}
+        if "agent_data" in data and isinstance(data["agent_data"], dict):
+            raw_agent_data = cast(Dict[Any, Any], data["agent_data"])
+            
+            try:
+                # Get agent IDs as a list to iterate over
+                agent_ids = [a for a in raw_agent_data.keys()]
+                
+                # Rebuild with string keys
+                for agent_id in agent_ids:
+                    if agent_id is not None:
+                        agent_id_str = str(agent_id)
+                        agent_dict = raw_agent_data[agent_id]
+                        
+                        if isinstance(agent_dict, dict):
+                            session.agent_data[agent_id_str] = {}
+                            
+                            # Get keys for this agent
+                            keys = [k for k in agent_dict.keys()]
+                            
+                            # Rebuild with string keys
+                            for k in keys:
+                                if k is not None:
+                                    key_str = str(k)
+                                    session.agent_data[agent_id_str][key_str] = agent_dict[k]
+            except Exception:
+                # On any error, use empty dict (already initialized above)
+                pass
+        
+        # Handle shared_keys
+        session.shared_keys = set()
+        if "shared_keys" in data and isinstance(data["shared_keys"], list):
+            raw_shared_keys = cast(List[Any], data["shared_keys"])
+            
+            try:
+                # Convert each item to string and add to set
+                for k in raw_shared_keys:
+                    if k is not None:
+                        key_str = str(k)
+                        session.shared_keys.add(key_str)
+            except Exception:
+                # On any error, use empty set (already initialized above)
+                pass
                 
         return session
     
@@ -179,6 +226,93 @@ class SessionState:
         except:
             # On any error, return a new empty session
             return cls()
+    
+    def set_agent_data(self, agent_id: str, key: str, value: Any) -> None:
+        """
+        Set data specific to an agent.
+        
+        Args:
+            agent_id: ID of the agent
+            key: Data key
+            value: Data value
+        """
+        if agent_id not in self.agent_data:
+            self.agent_data[agent_id] = {}
+            
+        self.agent_data[agent_id][key] = value
+        self.last_updated = datetime.now().isoformat()
+    
+    def get_agent_data(self, agent_id: str, key: str, default: Any = None) -> Any:
+        """
+        Get data specific to an agent.
+        
+        Args:
+            agent_id: ID of the agent
+            key: Data key
+            default: Default value if key doesn't exist
+            
+        Returns:
+            Value associated with key or default
+        """
+        if agent_id not in self.agent_data:
+            return default
+            
+        return self.agent_data[agent_id].get(key, default)
+    
+    def share_key(self, key: str) -> None:
+        """
+        Mark a key as shared between agents.
+        
+        Args:
+            key: Key to mark as shared
+        """
+        self.shared_keys.add(key)
+    
+    def unshare_key(self, key: str) -> None:
+        """
+        Remove a key from shared keys.
+        
+        Args:
+            key: Key to unmark as shared
+        """
+        if key in self.shared_keys:
+            self.shared_keys.remove(key)
+    
+    def is_key_shared(self, key: str) -> bool:
+        """
+        Check if a key is shared between agents.
+        
+        Args:
+            key: Key to check
+            
+        Returns:
+            True if the key is shared, False otherwise
+        """
+        return key in self.shared_keys
+    
+    def get_shared_keys(self) -> List[str]:
+        """
+        Get all shared keys.
+        
+        Returns:
+            List of shared keys
+        """
+        return list(self.shared_keys)
+    
+    def get_agent_keys(self, agent_id: str) -> List[str]:
+        """
+        Get all keys specific to an agent.
+        
+        Args:
+            agent_id: ID of the agent
+            
+        Returns:
+            List of keys specific to the agent
+        """
+        if agent_id not in self.agent_data:
+            return []
+            
+        return list(self.agent_data[agent_id].keys())
 
 
 def get_or_create_session_state(context: Dict[str, Any]) -> SessionState:
