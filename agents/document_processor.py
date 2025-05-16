@@ -4,7 +4,7 @@ Document processor agent for the FinFlow system.
 
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 from google.adk.tools import ToolContext # type: ignore
 from google.adk.agents import LlmAgent # type: ignore
@@ -37,13 +37,13 @@ class DocumentProcessorAgent(BaseAgent):
     def _register_document_ai_tool(self):
         """Register Document AI tool."""
         try:
-            from tools.document_ai import process_document
+            from tools.document_ai import process_document, analyze_financial_document
             from utils.agent_tools import DocumentProcessingTool
             
-            # Adapter function with corrected signature
+            # Adapter function for general document processing
             def document_adapter(document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
-                # Call process_document with default processor_id if not provided in context
-                processor_id = "default-processor"
+                # Get processor ID from context or use default invoice processor
+                processor_id = "projects/YOUR_PROJECT/locations/us-central1/processors/finflow-invoice-processor"
                 
                 # Read the file as bytes before passing to process_document
                 try:
@@ -54,17 +54,109 @@ class DocumentProcessorAgent(BaseAgent):
                     return {"status": "error", "message": f"File not found: {document_path}"}
                 except Exception as e:
                     return {"status": "error", "message": f"Error processing document: {str(e)}"}
+            
+            # Adapter function specifically for invoice processing
+            def invoice_adapter(document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+                try:
+                    with open(document_path, 'rb') as file:
+                        file_content = file.read()
+                    
+                    # Use analyze_financial_document which is optimized for invoices and receipts
+                    result = analyze_financial_document(file_content, tool_context)
+                    
+                    # If document type is not invoice/receipt, log a warning
+                    if result.get("document_type") not in ["invoice", "receipt"]:
+                        self.logger.warning(f"Document {document_path} detected as {result.get('document_type')}, not invoice/receipt")
+                    
+                    return result
+                except FileNotFoundError:
+                    return {"status": "error", "message": f"File not found: {document_path}"}
+                except Exception as e:
+                    return {"status": "error", "message": f"Error processing invoice: {str(e)}"}
                 
+            # Register general document processing tool
             doc_ai_tool = DocumentProcessingTool(document_adapter)
-            # Call the inherited add_tool method from LlmAgent
             LlmAgent.add_tool(self, doc_ai_tool)  # type: ignore
-            self.logger.info("Document AI tool registered successfully")
+            
+            # Register invoice-specific tool using the dedicated InvoiceProcessingTool
+            from utils.agent_tools import InvoiceProcessingTool
+            invoice_tool = InvoiceProcessingTool(invoice_adapter)
+            LlmAgent.add_tool(self, invoice_tool)  # type: ignore
+            
+            self.logger.info("Document AI tools registered successfully")
         except Exception as e:
-            self.logger.error(f"Failed to register Document AI tool: {e}")
+            self.logger.error(f"Failed to register Document AI tools: {e}")
+    
+    def _register_document_ingestion_tool(self):
+        """Register document ingestion tool."""
+        try:
+            from tools.document_ingestion import validate_document, preprocess_document, upload_document, batch_upload_documents
+            from utils.agent_tools import FinflowTool
+            
+            # Create adapter function for document validation
+            def validate_adapter(document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+                return validate_document(document_path)
+            
+            # Create adapter function for document preprocessing
+            def preprocess_adapter(document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+                return preprocess_document(document_path)
+            
+            # Create adapter function for document upload
+            def upload_adapter(document_path: str, destination_folder: Optional[str] = None, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+                return upload_document(document_path, destination_folder, tool_context)
+            
+            # Create adapter function for batch upload
+            def batch_upload_adapter(file_paths: List[str], destination_folder: Optional[str] = None, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+                return batch_upload_documents(file_paths, destination_folder, tool_context)
+            
+            # Register document validation tool
+            validate_tool = FinflowTool(
+                name="validate_document",
+                description="Validates if a document is of supported type and format.",
+                function=lambda params, ctx: validate_adapter(params.get("document_path", ""), ctx)
+            )
+            LlmAgent.add_tool(self, validate_tool)  # type: ignore
+            
+            # Register document preprocessing tool
+            preprocess_tool = FinflowTool(
+                name="preprocess_document",
+                description="Preprocesses a document for improved Document AI processing.",
+                function=lambda params, ctx: preprocess_adapter(params.get("document_path", ""), ctx)
+            )
+            LlmAgent.add_tool(self, preprocess_tool)  # type: ignore
+            
+            # Register document upload tool
+            upload_tool = FinflowTool(
+                name="upload_document",
+                description="Uploads a document to the FinFlow system.",
+                function=lambda params, ctx: upload_adapter(
+                    params.get("document_path", ""),
+                    params.get("destination_folder"),
+                    ctx
+                )
+            )
+            LlmAgent.add_tool(self, upload_tool)  # type: ignore
+            
+            # Register batch upload tool
+            batch_tool = FinflowTool(
+                name="batch_upload_documents",
+                description="Upload multiple documents to the FinFlow system.",
+                function=lambda params, ctx: batch_upload_adapter(
+                    params.get("file_paths", []),
+                    params.get("destination_folder"),
+                    ctx
+                )
+            )
+            LlmAgent.add_tool(self, batch_tool)  # type: ignore
+            
+            self.logger.info("Document ingestion tools registered successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to register document ingestion tools: {e}")
     
     def register_tools(self):
         """Register all tools for the document processor agent."""
         self._register_document_ai_tool()
+        self._register_document_ingestion_tool()
         self.logger.info("All document processing tools registered")
     
     def process_document(self, context: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:

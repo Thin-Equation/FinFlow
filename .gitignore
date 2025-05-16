@@ -3,33 +3,85 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# C extensions
+*.so
+
 # Virtual Environment
 finflow-env/
 venv/
 ENV/
+.env/
+.venv/
+env/
+env.bak/
+venv.bak/
 
 # Distribution / packaging
 dist/
 build/
+downloads/
 *.egg-info/
+.Python
+develop-eggs/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg
 
 # Local configuration
 .env
 *.local.yaml
 *.local.yml
+config_local.py
 
 # IDE specific files
 .idea/
 .vscode/
 *.swp
 *.swo
+.DS_Store
+*~
+.project
+.pydevproject
+.settings/
+.spyderproject
+.spyproject
 
 # Jupyter Notebook
 .ipynb_checkpoints
+.jupyter/
 
 # GCP credentials
 *credentials*.json
+*service-account*.json
+*.pem
 
 # Logs
 logs/
 *.log
+local_logs/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Sphinx documentation
+docs/_build/
+_build/
+
+# Unit test / coverage reports
+.tox/
+nosetests.xml

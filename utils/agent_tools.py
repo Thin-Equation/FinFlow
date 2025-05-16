@@ -78,6 +78,113 @@ class DocumentProcessingTool(FinflowTool):
         return self._processor(document_path, tool_context)
 
 
+class DocumentIngestionTool(FinflowTool):
+    """Tool for document ingestion operations."""
+    
+    def __init__(
+        self, 
+        ingestion_function: Callable[[str, Optional[ToolContext]], Dict[str, Any]],
+        name: str = "ingest_document",
+        description: str = "Upload and validate a document"
+    ):
+        """
+        Initialize document ingestion tool.
+        
+        Args:
+            ingestion_function: Function for document ingestion operations
+            name: Tool name
+            description: Tool description
+        """
+        super().__init__(
+            name=name,
+            description=description,
+            function=self._ingest_document
+        )
+        self._ingestion = ingestion_function
+    
+    def _ingest_document(self, parameters: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+        """
+        Perform document ingestion operation.
+        
+        Args:
+            parameters: Parameters with document path and other options
+            tool_context: Tool context
+            
+        Returns:
+            Ingestion operation results
+        """
+        document_path = parameters.get("document_path")
+        destination_folder = parameters.get("destination_folder")
+        
+        if not document_path:
+            raise ValueError("Document path not provided")
+            
+        return self._ingestion(document_path, tool_context)
+
+
+class InvoiceProcessingTool(DocumentProcessingTool):
+    """Tool specifically for processing invoice documents."""
+    
+    def __init__(self, processor_function: Callable[[str, Optional[ToolContext]], Dict[str, Any]]):
+        """
+        Initialize invoice processing tool.
+        
+        Args:
+            processor_function: Function to process invoice documents
+        """
+        # Use the same initialization as DocumentProcessingTool but with a different name and description
+        super().__init__(processor_function)
+        self.name = "process_invoice"
+        self.description = "Process an invoice document and extract structured financial information"
+
+
+class DocumentIngestionTool(FinflowTool):
+    """Tool for document ingestion operations."""
+    
+    def __init__(
+        self, 
+        ingestion_function: Callable[[str, Optional[ToolContext]], Dict[str, Any]],
+        name: str = "ingest_document",
+        description: str = "Upload and validate a document"
+    ):
+        """
+        Initialize document ingestion tool.
+        
+        Args:
+            ingestion_function: Function for document ingestion operations
+            name: Tool name
+            description: Tool description
+        """
+        super().__init__(
+            name=name,
+            description=description,
+            function=self._ingest_document
+        )
+        self._ingestion = ingestion_function
+    
+    def _ingest_document(self, parameters: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+        """
+        Perform document ingestion operation.
+        
+        Args:
+            parameters: Parameters with document path and other options
+            tool_context: Tool context
+            
+        Returns:
+            Ingestion operation results
+        """
+        document_path = parameters.get("document_path")
+        destination_folder = parameters.get("destination_folder")
+        
+        if not document_path:
+            raise ValueError("Document path not provided")
+        
+        if destination_folder:
+            return self._ingestion(document_path, destination_folder, tool_context)
+            
+        return self._ingestion(document_path, tool_context)
+
+
 class RuleLookupTool(FinflowTool):
     """Tool for retrieving compliance rules."""
     
@@ -104,15 +211,50 @@ class RuleLookupTool(FinflowTool):
             tool_context: Tool context
             
         Returns:
-            Retrieved rules
+            Compliance rules
         """
         document_type = parameters.get("document_type")
-        jurisdiction = parameters.get("jurisdiction", "default")
+        jurisdiction = parameters.get("jurisdiction")
         
-        if not document_type:
-            raise ValueError("Document type not provided")
+        if not document_type or not jurisdiction:
+            raise ValueError("Document type and jurisdiction must be provided")
             
         return self._rule_lookup(document_type, jurisdiction, tool_context)
+
+
+class InvoiceProcessingTool(FinflowTool):
+    """Tool specifically for processing invoice documents."""
+    
+    def __init__(self, processor_function: Callable[[str, Optional[ToolContext]], Dict[str, Any]]):
+        """
+        Initialize invoice processing tool.
+        
+        Args:
+            processor_function: Function to process invoice documents
+        """
+        super().__init__(
+            name="process_invoice",
+            description="Process an invoice document and extract structured financial information such as invoice number, amounts, dates, and vendor details",
+            function=self._process_invoice
+        )
+        self._processor = processor_function
+    
+    def _process_invoice(self, parameters: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+        """
+        Process an invoice document.
+        
+        Args:
+            parameters: Parameters with invoice document path
+            tool_context: Tool context
+            
+        Returns:
+            Invoice processing results with structured financial data
+        """
+        document_path = parameters.get("document_path")
+        if not document_path:
+            raise ValueError("Invoice document path not provided")
+            
+        return self._processor(document_path, tool_context)
 
 
 class ValidationTool(FinflowTool):

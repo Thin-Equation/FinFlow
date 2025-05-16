@@ -16,7 +16,7 @@ if ! command -v adk >/dev/null 2>&1; then
 fi
 
 # Default values
-AGENT_PATH="./agents/hello_world_agent.py"
+AGENT_PATH="/Users/dhairyagundechia/Downloads/finflow/agents/hello_world_agent.py"
 PORT=8080
 DEBUG=false
 
