@@ -1,0 +1,110 @@
+{
+  "sample_invoice_1.pdf": {
+    "invoice_number": "INV-12345",
+    "date": "2023-05-15",
+    "due_date": "2023-06-15",
+    "vendor": {
+      "name": "Acme Supplies Ltd",
+      "tax_id": "12-3456789"
+    },
+    "customer": {
+      "name": "XYZ Corporation",
+      "tax_id": "11-2233445"
+    },
+    "total_amount": 1250.00,
+    "subtotal": 1000.00,
+    "tax_amount": 250.00,
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "line_items": [
+      {
+        "description": "Office Chair - Standard",
+        "quantity": 2,
+        "unit_price": 129.99,
+        "amount": 259.98
+      },
+      {
+        "description": "Desk - Regular",
+        "quantity": 1,
+        "unit_price": 199.99,
+        "amount": 199.99
+      },
+      {
+        "description": "Monitor - 24\"",
+        "quantity": 2,
+        "unit_price": 179.99,
+        "amount": 359.98
+      },
+      {
+        "description": "Software License - Basic",
+        "quantity": 1,
+        "unit_price": 99.99,
+        "amount": 99.99
+      }
+    ]
+  },
+  "sample_invoice_2.pdf": {
+    "invoice_number": "INV-54321",
+    "date": "2023-05-20",
+    "due_date": "2023-06-20",
+    "vendor": {
+      "name": "Tech Solutions Inc",
+      "tax_id": "98-7654321"
+    },
+    "customer": {
+      "name": "Innovative Startups LLC",
+      "tax_id": "22-3344556"
+    },
+    "total_amount": 1879.96,
+    "subtotal": 1599.96,
+    "tax_amount": 280.00,
+    "currency": "USD",
+    "payment_terms": "Net 30",
+    "line_items": [
+      {
+        "description": "Laptop - Premium",
+        "quantity": 1,
+        "unit_price": 1299.99,
+        "amount": 1299.99
+      },
+      {
+        "description": "Software License - Premium",
+        "quantity": 1,
+        "unit_price": 199.99,
+        "amount": 199.99
+      },
+      {
+        "description": "Tech Support (Hourly)",
+        "quantity": 1,
+        "unit_price": 79.99,
+        "amount": 79.99
+      }
+    ]
+  },
+  "sample_invoice_3.pdf": {
+    "invoice_number": "INV-98765",
+    "date": "2023-05-25",
+    "due_date": "2023-06-25",
+    "vendor": {
+      "name": "Global Logistics Corp",
+      "tax_id": "45-6789012"
+    },
+    "customer": {
+      "name": "Big Enterprise Group",
+      "tax_id": "33-4455667"
+    },
+    "total_amount": 349.99,
+    "subtotal": 299.99,
+    "tax_amount": 50.00,
+    "currency": "USD",
+    "payment_terms": "Net 15",
+    "line_items": [
+      {
+        "description": "Server Hosting (Monthly)",
+        "quantity": 6,
+        "unit_price": 49.99,
+        "amount": 299.94
+      }
+    ]
+  }
+}

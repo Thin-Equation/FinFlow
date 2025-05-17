@@ -85,7 +85,7 @@ def analyze_financial_document(file_content: bytes, tool_context: Optional[ToolC
         dict: Extracted financial information
     """
     # Default to invoice processor
-    processor_id = "projects/YOUR_PROJECT/locations/us-central1/processors/invoice-processor"
+    processor_id = "projects/YOUR_PROJECT/locations/us-central1/processors/finflow-invoice-processor"
     
     # Try to get processor_id from tool_context if available
     if tool_context:

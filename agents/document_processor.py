@@ -37,13 +37,25 @@ class DocumentProcessorAgent(BaseAgent):
     def _register_document_ai_tool(self):
         """Register Document AI tool."""
         try:
-            from tools.document_ai import process_document, analyze_financial_document
+            from tools.document_ai import process_document, analyze_financial_document, get_invoice_processor_capabilities
             from utils.agent_tools import DocumentProcessingTool
+            
+            # Get project configuration (in production, this would come from environment or config)
+            from config.config_loader import load_config
+            config = load_config()
+            project_id = config.get('google_cloud', {}).get('project_id', 'YOUR_PROJECT')
+            location = config.get('google_cloud', {}).get('location', 'us-central1')
+            processor_name = f"projects/{project_id}/locations/{location}/processors/finflow-invoice-processor"
             
             # Adapter function for general document processing
             def document_adapter(document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
                 # Get processor ID from context or use default invoice processor
-                processor_id = "projects/YOUR_PROJECT/locations/us-central1/processors/finflow-invoice-processor"
+                processor_id = processor_name
+                
+                if tool_context:
+                    ctx_processor_id = getattr(tool_context, "processor_id", None)
+                    if ctx_processor_id:
+                        processor_id = ctx_processor_id
                 
                 # Read the file as bytes before passing to process_document
                 try:
@@ -64,15 +76,43 @@ class DocumentProcessorAgent(BaseAgent):
                     # Use analyze_financial_document which is optimized for invoices and receipts
                     result = analyze_financial_document(file_content, tool_context)
                     
-                    # If document type is not invoice/receipt, log a warning
-                    if result.get("document_type") not in ["invoice", "receipt"]:
-                        self.logger.warning(f"Document {document_path} detected as {result.get('document_type')}, not invoice/receipt")
+                    # Extract additional invoice-specific fields
+                    if result.get("status") != "error":
+                        # If document type is not invoice/receipt, log a warning
+                        if result.get("document_type") not in ["invoice", "receipt"]:
+                            self.logger.warning(f"Document {document_path} detected as {result.get('document_type')}, not invoice/receipt")
+                        
+                        # Add structured invoice data
+                        entities = result.get("entities", {})
+                        result["structured_data"] = {
+                            "invoice_number": entities.get("invoice_id") or entities.get("invoice_number"),
+                            "issue_date": entities.get("invoice_date") or entities.get("date"),
+                            "due_date": entities.get("due_date"),
+                            "vendor": {
+                                "name": entities.get("supplier_name") or entities.get("vendor"),
+                                "tax_id": entities.get("supplier_tax_id")
+                            },
+                            "customer": {
+                                "name": entities.get("customer_name"),
+                                "tax_id": entities.get("customer_tax_id")
+                            },
+                            "line_items": entities.get("line_items", []),
+                            "total_amount": entities.get("total_amount"),
+                            "subtotal": entities.get("subtotal"),
+                            "tax_amount": entities.get("tax_amount"),
+                            "currency": entities.get("currency"),
+                            "payment_terms": entities.get("payment_terms")
+                        }
                     
                     return result
                 except FileNotFoundError:
                     return {"status": "error", "message": f"File not found: {document_path}"}
                 except Exception as e:
                     return {"status": "error", "message": f"Error processing invoice: {str(e)}"}
+            
+            # Adapter function to get invoice processor capabilities
+            def capabilities_adapter(parameters: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+                return get_invoice_processor_capabilities()
                 
             # Register general document processing tool
             doc_ai_tool = DocumentProcessingTool(document_adapter)
@@ -82,6 +122,14 @@ class DocumentProcessorAgent(BaseAgent):
             from utils.agent_tools import InvoiceProcessingTool
             invoice_tool = InvoiceProcessingTool(invoice_adapter)
             LlmAgent.add_tool(self, invoice_tool)  # type: ignore
+            
+            # Register capabilities tool
+            capabilities_tool = FinflowTool(
+                name="get_invoice_processor_capabilities",
+                description="Get information about the capabilities and limitations of the invoice processor",
+                function=capabilities_adapter
+            )
+            LlmAgent.add_tool(self, capabilities_tool)  # type: ignore
             
             self.logger.info("Document AI tools registered successfully")
         except Exception as e:
@@ -190,17 +238,62 @@ class DocumentProcessorAgent(BaseAgent):
                 if not os.path.exists(document_path):
                     raise FileNotFoundError(f"Document not found: {document_path}")
                 
-                # Process document using Document AI
-                # We'll use either the actual Document AI tool or simulated behavior depending on availability
+                # Validate document before processing
                 try:
-                    # Try to use the Document AI tool if available
-                    from tools.document_ai import process_document
+                    from tools.document_ingestion import validate_document
+                    validation_result = validate_document(document_path)
                     
-                    with open(document_path, 'rb') as file:
-                        file_content = file.read()
+                    if validation_result.get("status") == "error" or not validation_result.get("valid", False):
+                        error_msg = validation_result.get("message", "Document validation failed")
+                        self.logger.warning(f"Document validation failed: {error_msg}")
+                        # Continue processing, but log the warning
+                except Exception as e:
+                    self.logger.warning(f"Could not validate document: {str(e)}")
+                    # Continue with processing even if validation isn't available
+                
+                # Process document using smart detection of document type
+                try:
+                    # Detect if this is an invoice or receipt to use specialized processor
+                    _, ext = os.path.splitext(document_path.lower())
+                    file_type = ext.lstrip(".")
                     
-                    processor_id = "default-processor"  # Use default processor ID
-                    extracted_info = process_document(file_content, processor_id, tool_context)
+                    # Initialize result
+                    extracted_info = {}
+                    
+                    # Use appropriate tool based on the file and context hints
+                    if context.get("document_type") == "invoice" or "invoice" in document_path.lower():
+                        # If explicitly an invoice or filename suggests it, use invoice processor
+                        self.logger.info(f"Processing as invoice: {document_path}")
+                        if hasattr(self, "process_invoice"):
+                            # Use the invoice-specific tool through ADK
+                            extracted_info = self.process_invoice({"document_path": document_path})
+                        else:
+                            # Fallback to direct function call
+                            from tools.document_ai import analyze_financial_document
+                            with open(document_path, 'rb') as file:
+                                file_content = file.read()
+                            extracted_info = analyze_financial_document(file_content, tool_context)
+                    else:
+                        # Use general document processor
+                        self.logger.info(f"Processing with general document processor: {document_path}")
+                        if hasattr(self, "process_document"):
+                            # Use the document processing tool through ADK
+                            extracted_info = self.process_document({"document_path": document_path})
+                        else:
+                            # Fallback to direct function call
+                            from tools.document_ai import process_document
+                            
+                            with open(document_path, 'rb') as file:
+                                file_content = file.read()
+                            
+                            # Get processor ID from context or configuration
+                            from config.config_loader import load_config
+                            config = load_config()
+                            project_id = config.get('google_cloud', {}).get('project_id', 'YOUR_PROJECT')
+                            location = config.get('google_cloud', {}).get('location', 'us-central1')
+                            processor_id = context.get("processor_id") or f"projects/{project_id}/locations/{location}/processors/finflow-document-processor"
+                            
+                            extracted_info = process_document(file_content, processor_id, tool_context)
                     
                     # If we get an error status, fall back to simulation
                     if extracted_info.get("status") == "error":
@@ -219,6 +312,10 @@ class DocumentProcessorAgent(BaseAgent):
                 context["extracted_data"] = structured_data
                 context["processing_end_time"] = datetime.now().isoformat()
                 context["status"] = "success"
+                
+                # Store confidence scores if available
+                if "metadata" in structured_data and "confidence" in structured_data["metadata"]:
+                    context["confidence_score"] = structured_data["metadata"]["confidence"]
                 
                 # Log completion
                 self.logger.info(f"Document processing completed successfully for: {document_path}")
@@ -297,8 +394,22 @@ class DocumentProcessorAgent(BaseAgent):
         Returns:
             Dict containing structured document data
         """
-        document_type = extracted_info["document_type"]
+        document_type = extracted_info.get("document_type", "unknown")
         entities = extracted_info.get("entities", {})
+        
+        # Check if we already have structured data from the Document AI tool
+        if "structured_data" in extracted_info:
+            structured_data = extracted_info["structured_data"]
+            # Ensure document_type is set
+            structured_data["document_type"] = document_type
+            # Add metadata if not present
+            if "metadata" not in structured_data:
+                structured_data["metadata"] = {
+                    "confidence": float(extracted_info.get("confidence", 0.0)),
+                    "pages": int(extracted_info.get("pages", 1)),
+                    "processing_timestamp": datetime.now().isoformat()
+                }
+            return structured_data
         
         # Common metadata structure to avoid type errors
         metadata: Dict[str, Any] = {
@@ -309,42 +420,138 @@ class DocumentProcessorAgent(BaseAgent):
         
         # Structure data based on document type
         if document_type == "invoice":
+            # Extract invoice number with fallbacks
+            invoice_number = (
+                entities.get("invoice_number") or 
+                entities.get("invoice_id") or 
+                entities.get("number") or 
+                entities.get("invoice_num")
+            )
+            
+            # Extract date with fallbacks
+            date_value = (
+                entities.get("invoice_date") or 
+                entities.get("date") or 
+                entities.get("issue_date")
+            )
+            
+            # Extract vendor data with fallbacks
+            vendor_name = (
+                entities.get("supplier_name") or 
+                entities.get("vendor") or 
+                entities.get("vendor_name") or
+                entities.get("company")
+            )
+            
+            # Try to convert total amount to float, handle different formats
+            try:
+                total_amount_str = str(entities.get("total_amount", "0"))
+                # Remove any currency symbols or commas
+                total_amount_str = ''.join(c for c in total_amount_str if c.isdigit() or c in ['.', '-'])
+                total_amount = float(total_amount_str)
+            except (ValueError, TypeError):
+                total_amount = 0.0
+                
+            # Convert line items if needed
+            line_items = entities.get("line_items", [])
+            if isinstance(line_items, str):
+                # Try to parse line items if they're in string format
+                try:
+                    import json
+                    line_items = json.loads(line_items)
+                except:
+                    line_items = [{"description": line_items, "amount": "unknown"}]
+            elif not isinstance(line_items, list):
+                line_items = []
+                
             structured_data: Dict[str, Any] = {
                 "document_type": "invoice",
                 "metadata": metadata,
-                "invoice_number": entities.get("invoice_number"),
-                "date": entities.get("date"),
+                "invoice_number": invoice_number,
+                "date": date_value,
+                "due_date": entities.get("due_date"),
                 "vendor": {
-                    "name": entities.get("vendor"),
-                    "id": None  # Would be populated in a real implementation
+                    "name": vendor_name,
+                    "tax_id": entities.get("supplier_tax_id") or entities.get("vendor_tax_id")
                 },
-                "total_amount": float(entities.get("total_amount", "0")),
-                "line_items": entities.get("line_items", [])
+                "customer": {
+                    "name": entities.get("customer_name") or entities.get("bill_to"),
+                    "tax_id": entities.get("customer_tax_id")
+                },
+                "total_amount": total_amount,
+                "subtotal": entities.get("subtotal"),
+                "tax_amount": entities.get("tax_amount") or entities.get("tax"),
+                "currency": entities.get("currency"),
+                "payment_terms": entities.get("payment_terms"),
+                "line_items": line_items
             }
         elif document_type == "receipt":
+            # Try to convert total amount to float
+            try:
+                total_amount = float(str(entities.get("total_amount", "0")))
+            except (ValueError, TypeError):
+                total_amount = 0.0
+                
             structured_data = {
                 "document_type": "receipt",
-                "metadata": metadata,  # Use the common metadata structure
-                "receipt_id": entities.get("receipt_id"),
-                "date": entities.get("date"),
+                "metadata": metadata,
+                "receipt_id": entities.get("receipt_id") or entities.get("receipt_number"),
+                "date": entities.get("date") or entities.get("receipt_date"),
                 "vendor": {
-                    "name": entities.get("vendor"),
-                    "id": None
+                    "name": entities.get("vendor") or entities.get("merchant"),
+                    "id": entities.get("vendor_id")
                 },
-                "total_amount": float(entities.get("total_amount", "0")),
+                "total_amount": total_amount,
+                "tax_amount": entities.get("tax_amount") or entities.get("tax"),
+                "tip_amount": entities.get("tip_amount") or entities.get("tip"),
+                "payment_method": entities.get("payment_method") or entities.get("payment_type"),
+                "currency": entities.get("currency"),
                 "line_items": entities.get("line_items", [])
             }
         else:
             # Generic structure for unknown document types
             structured_data = {
                 "document_type": "unknown",
-                "metadata": metadata,  # Use the common metadata structure
+                "metadata": metadata,
                 "text_content": extracted_info.get("text", ""),
                 "entities": entities
             }
             
         return structured_data
     
+    def handle_error(self, error: Exception, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle errors in document processing.
+        
+        Args:
+            error: Exception that occurred
+            context: Current processing context
+            
+        Returns:
+            Updated context with error information
+        """
+        # Get error details
+        error_type = type(error).__name__
+        error_message = str(error)
+        
+        # Log the error
+        self.logger.error(f"Document processing error - {error_type}: {error_message}")
+        
+        # Add error details to context
+        context["status"] = "error"
+        context["error_type"] = error_type
+        context["error_message"] = error_message
+        
+        # Try to get traceback info for debugging
+        import traceback
+        context["error_traceback"] = traceback.format_exc()
+        
+        # Include document path in error if available
+        if "document_path" in context:
+            self.logger.error(f"Error processing document: {context['document_path']}")
+        
+        return context
+
     def log_activity(self, activity_type: str, details: Dict[str, Any], context: Dict[str, Any]) -> None:
         """
         Log agent activity for audit and debugging purposes.
