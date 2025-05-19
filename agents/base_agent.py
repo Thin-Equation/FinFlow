@@ -19,6 +19,9 @@ T = TypeVar('T')
 class BaseAgent(LlmAgent):
     """Base agent class with common functionality for all FinFlow agents."""
     
+    # Pre-define logger field to make it compatible with Pydantic
+    logger: logging.Logger = None
+    
     def __init__(
         self,
         name: str,
@@ -38,6 +41,9 @@ class BaseAgent(LlmAgent):
             tools: List of tools to add to the agent.
             temperature: The temperature for the agent's model.
         """
+        # Create logger before initializing parent to avoid Pydantic validation issues
+        self.__dict__["logger"] = logging.getLogger(f"finflow.agents.{name}")
+        
         # Call parent constructor with necessary parameters
         # We need to use type: ignore because of complex typing in ADK
         super().__init__(  # type: ignore
@@ -51,8 +57,6 @@ class BaseAgent(LlmAgent):
         # Explicitly add a type-annotated add_tool method to handle typing issues
         # The original is inherited from LlmAgent but needs explicit typing for TypeScript
         self.add_tool: Callable[[BaseTool], None]
-        
-        self.logger = logging.getLogger(f"finflow.agents.{name}")
         
         # Add tools if provided
         if tools:
