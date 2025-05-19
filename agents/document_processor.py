@@ -5,6 +5,8 @@ Document processor agent for the FinFlow system.
 import logging
 import os
 import uuid
+import json
+import concurrent.futures
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from google.adk.tools import ToolContext # type: ignore
@@ -13,7 +15,7 @@ from google.adk.agents import LlmAgent # type: ignore
 from agents.base_agent import BaseAgent
 from utils.prompt_templates import get_agent_prompt
 from utils.logging_config import TraceContext, log_agent_call
-from config.document_processor_config import  get_processor_id
+from config.document_processor_config import get_processor_id, DEFAULT_PROCESSOR_LOCATION
 from config.config_loader import load_config
 
 class DocumentProcessorAgent(BaseAgent):
@@ -64,6 +66,9 @@ class DocumentProcessorAgent(BaseAgent):
             "avg_processing_time": 0.0,
             "avg_confidence_score": 0.0,
         }
+        
+        # Register tools
+        self.register_tools()
     
     def _load_config(self) -> Dict[str, Any]:
         """Load document processor configuration."""
@@ -1250,3 +1255,571 @@ class DocumentProcessorAgent(BaseAgent):
             n_success = self.metrics["successful_extractions"]
             old_conf_avg = self.metrics["avg_confidence_score"]
             self.metrics["avg_confidence_score"] = old_conf_avg + (confidence_score - old_conf_avg) / n_success
+    
+    def process_document_with_classification(self, context: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+        """
+        Process a document with automatic classification to determine the best processor.
+        
+        Args:
+            context: Processing context with document information
+            tool_context: Tool context provided by ADK
+            
+        Returns:
+            Dict containing the extracted information and classification results
+        """
+        # Extract document path from context
+        document_path = context.get("document_path")
+        if not document_path:
+            return self.handle_error(ValueError("Document path not provided in context"), context)
+            
+        # Create trace context for this process
+        with TraceContext() as trace:
+            # Log the start of processing
+            self.logger.info(f"Processing document with classification: {document_path}")
+            
+            # Track processing in context
+            context["trace_id"] = trace.trace_id
+            context["processing_start_time"] = datetime.now().isoformat()
+            
+            try:
+                # First, check if file exists
+                if not os.path.exists(document_path):
+                    raise FileNotFoundError(f"Document not found: {document_path}")
+                
+                # Validate document before processing
+                try:
+                    if self.ingestion_manager:
+                        validation_result = self.ingestion_manager.validate_document(document_path)
+                        
+                        if validation_result.get("status") == "error" or not validation_result.get("valid", False):
+                            error_msg = validation_result.get("message", "Document validation failed")
+                            self.logger.warning(f"Document validation failed: {error_msg}")
+                            # Continue with processing but log warning
+                    else:
+                        # Fallback to basic validation
+                        from tools.document_ingestion import validate_document
+                        validate_document(document_path)
+                except Exception as e:
+                    self.logger.warning(f"Could not validate document: {str(e)}")
+                
+                # Classify document to determine its type
+                document_type = "general"  # Default type
+                classification_result = {}
+                
+                try:
+                    if self.document_classifier:
+                        classification_result = self.document_classifier.classify_document(document_path)
+                        if classification_result.get("document_type"):
+                            document_type = classification_result.get("document_type")
+                            self.logger.info(f"Document classified as: {document_type} (confidence: {classification_result.get('confidence', 'N/A')})")
+                    else:
+                        # Fallback to basic classification
+                        from tools.document_classification import classify_document
+                        classification_result = classify_document(document_path)
+                        if classification_result.get("document_type"):
+                            document_type = classification_result.get("document_type")
+                except Exception as e:
+                    self.logger.warning(f"Document classification failed: {str(e)}")
+                
+                # Add classification result to context
+                context["document_type"] = document_type
+                context["classification"] = classification_result
+                
+                # Process document using appropriate processor based on document type
+                try:
+                    if not self.document_processor:
+                        self.logger.warning("Document processor not initialized, falling back to default processing")
+                        extracted_info = self._extract_document_info(document_path)
+                    else:
+                        # Get processor ID based on document type
+                        processor_id = self.get_processor_id_for_document_type(document_type)
+                        
+                        # Process document using the selected processor
+                        extracted_info = self.document_processor.process_document(
+                            document_path,
+                            processor_id=processor_id,
+                            document_type=document_type
+                        )
+                        
+                        # If processing failed, try generic processor as fallback
+                        if extracted_info.get("status") == "error":
+                            self.logger.warning(f"Failed to process with {document_type} processor, trying generic: {extracted_info.get('message')}")
+                            generic_processor_id = self.get_processor_id_for_document_type("general")
+                            extracted_info = self.document_processor.process_document(
+                                document_path,
+                                processor_id=generic_processor_id
+                            )
+                except Exception as e:
+                    self.logger.error(f"Document AI processing failed: {str(e)}")
+                    extracted_info = self._extract_document_info(document_path)  # Use fallback simulation
+                
+                # Structure the data according to FinFlow data model
+                structured_data = self._structure_document_data(extracted_info, document_type)
+                
+                # Normalize the extracted data
+                normalized_data = self._normalize_data(structured_data)
+                
+                # Update context with result
+                context["extracted_data"] = normalized_data
+                context["processing_end_time"] = datetime.now().isoformat()
+                context["status"] = "success"
+                
+                # Update metrics
+                self._update_metrics(document_type, normalized_data)
+                
+                # Log completion
+                self.logger.info(f"Document processing completed successfully for: {document_path}")
+                
+            except Exception as e:
+                # Handle errors
+                context = self.handle_error(e, context)
+                context["processing_end_time"] = datetime.now().isoformat()
+                context["status"] = "error"
+                
+                # Log error
+                self.logger.error(f"Document processing failed for: {document_path}")
+                
+        return context
+        
+    def batch_process_documents(self, context: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+        """
+        Process multiple documents in parallel.
+        
+        Args:
+            context: Processing context with file paths and options
+            tool_context: Tool context provided by ADK
+            
+        Returns:
+            Dict containing the results for each document
+        """
+        # Extract file paths from context
+        file_paths = context.get("file_paths", [])
+        if not file_paths:
+            return self.handle_error(ValueError("No file paths provided for batch processing"), context)
+        
+        # Get batch options
+        destination_folder = context.get("destination_folder")
+        batch_size = context.get("batch_size") or self.config.get("max_batch_size", 20)
+        
+        # Create trace context for batch process
+        with TraceContext() as trace:
+            # Generate batch ID
+            batch_id = str(uuid.uuid4())
+            
+            # Track batch in context
+            context["batch_id"] = batch_id
+            context["trace_id"] = trace.trace_id
+            context["processing_start_time"] = datetime.now().isoformat()
+            context["total_documents"] = len(file_paths)
+            context["processed_documents"] = 0
+            context["successful_documents"] = 0
+            context["failed_documents"] = 0
+            context["results"] = {}
+            
+            # Store batch context for tracking
+            self.active_batches[batch_id] = context.copy()
+            
+            try:
+                self.logger.info(f"Starting batch processing of {len(file_paths)} documents (Batch ID: {batch_id})")
+                
+                # Check if enhanced document processor is available
+                if self.document_processor and hasattr(self.document_processor, "batch_process_documents"):
+                    # Use enhanced batch processing capability
+                    batch_result = self.document_processor.batch_process_documents(
+                        file_paths,
+                        max_workers=self.config.get("max_parallel_workers", 5),
+                        destination_folder=destination_folder,
+                        batch_size=batch_size
+                    )
+                    
+                    # Update context with batch results
+                    context["results"] = batch_result.get("results", {})
+                    context["processed_documents"] = batch_result.get("processed_count", 0)
+                    context["successful_documents"] = batch_result.get("success_count", 0)
+                    context["failed_documents"] = batch_result.get("failed_count", 0)
+                    
+                else:
+                    # Fallback to manual batch processing with concurrent execution
+                    results = {}
+                    success_count = 0
+                    fail_count = 0
+                    
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.get("max_parallel_workers", 5)) as executor:
+                        # Start the document processing tasks
+                        future_to_path = {
+                            executor.submit(self._process_single_document, path, tool_context): path
+                            for path in file_paths[:batch_size]  # Limit to batch size
+                        }
+                        
+                        # Process as they complete
+                        for future in concurrent.futures.as_completed(future_to_path):
+                            path = future_to_path[future]
+                            try:
+                                result = future.result()
+                                results[path] = result
+                                if result.get("status") == "success":
+                                    success_count += 1
+                                else:
+                                    fail_count += 1
+                            except Exception as e:
+                                self.logger.error(f"Error processing document {path}: {str(e)}")
+                                results[path] = {"status": "error", "message": str(e)}
+                                fail_count += 1
+                    
+                    # Update context with results
+                    context["results"] = results
+                    context["processed_documents"] = len(results)
+                    context["successful_documents"] = success_count
+                    context["failed_documents"] = fail_count
+                
+                # Mark batch as completed
+                context["status"] = "completed"
+                context["processing_end_time"] = datetime.now().isoformat()
+                
+                # Log completion
+                self.logger.info(f"Batch processing completed for batch {batch_id}: {context['successful_documents']} successful, {context['failed_documents']} failed")
+                
+            except Exception as e:
+                # Handle errors
+                context = self.handle_error(e, context)
+                context["status"] = "error"
+                context["processing_end_time"] = datetime.now().isoformat()
+                self.logger.error(f"Batch processing failed: {str(e)}")
+            
+            # Update active batch entry
+            self.active_batches[batch_id] = context.copy()
+            
+        return context
+    
+    def get_processor_id_for_document_type(self, document_type: str) -> str:
+        """
+        Get the appropriate processor ID for a document type.
+        
+        Args:
+            document_type: The type of document (e.g., 'invoice', 'receipt', 'general')
+            
+        Returns:
+            The processor ID to use for this document type
+        """
+        try:
+            # First check the processor_configs for specific processor
+            if document_type in self.config.get("processor_configs", {}):
+                processor_config = self.config["processor_configs"][document_type]
+                project_id = self.config.get("project_id", "YOUR_PROJECT")
+                location = processor_config.get("location", DEFAULT_PROCESSOR_LOCATION)
+                processor_name = processor_config.get("processor_name")
+                return f"projects/{project_id}/locations/{location}/processors/{processor_name}"
+            
+            # Check if we can get it from a dedicated function
+            if hasattr(self, "get_processor_id"):
+                return self.get_processor_id(document_type)
+            
+            # Fall back to the default general processor
+            default_config = self.config["processor_configs"].get("general", {})
+            project_id = self.config.get("project_id", "YOUR_PROJECT")
+            location = default_config.get("location", DEFAULT_PROCESSOR_LOCATION)
+            processor_name = default_config.get("processor_name", "finflow-document-processor")
+            return f"projects/{project_id}/locations/{location}/processors/{processor_name}"
+            
+        except Exception as e:
+            self.logger.error(f"Error getting processor ID for document type {document_type}: {str(e)}")
+            # Use the general processor as a failsafe
+            project_id = self.config.get("project_id", "YOUR_PROJECT")
+            return f"projects/{project_id}/locations/{DEFAULT_PROCESSOR_LOCATION}/processors/finflow-document-processor"
+    
+    def _normalize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize extracted data according to FinFlow standards.
+        
+        This includes:
+        - Standardizing date formats
+        - Normalizing currency values
+        - Ensuring consistent structure across document types
+        
+        Args:
+            data: Extracted document data
+        
+        Returns:
+            Normalized document data
+        """
+        if not data:
+            return {}
+            
+        try:
+            # Create a copy to avoid modifying the original
+            normalized = data.copy()
+            document_type = normalized.get("document_type", "general")
+            
+            # Get normalization settings for this document type
+            norm_settings = {}
+            if document_type in self.config.get("processor_configs", {}):
+                norm_settings = self.config["processor_configs"][document_type].get("normalization", {})
+            
+            # Normalize dates (if we have date fields)
+            date_format = norm_settings.get("date_format", "YYYY-MM-DD")
+            for field in ["date", "issue_date", "invoice_date", "due_date", "transaction_date", "statement_date", "period_start", "period_end"]:
+                if field in normalized and normalized[field]:
+                    # Here we'd implement actual date normalization based on date_format
+                    # For now just ensure it exists and has a value
+                    pass
+            
+            # Normalize currency values
+            amount_precision = norm_settings.get("amount_precision", 2)
+            for field in ["total_amount", "subtotal", "tax_amount", "shipping_amount", "discount_amount"]:
+                if field in normalized and normalized[field]:
+                    # Try to convert to float and format with precision
+                    try:
+                        amount = float(normalized[field])
+                        normalized[field] = format(amount, f".{amount_precision}f")
+                    except (ValueError, TypeError):
+                        # If it can't be converted, leave as is
+                        pass
+            
+            # Normalize line items if present
+            if "line_items" in normalized and isinstance(normalized["line_items"], list):
+                for i, item in enumerate(normalized["line_items"]):
+                    if isinstance(item, dict):
+                        # Normalize quantity
+                        if "quantity" in item and item["quantity"]:
+                            try:
+                                item["quantity"] = str(float(item["quantity"]))
+                            except (ValueError, TypeError):
+                                pass
+                                
+                        # Normalize amount/unit_price
+                        for price_field in ["amount", "unit_price", "price"]:
+                            if price_field in item and item[price_field]:
+                                try:
+                                    amount = float(item[price_field])
+                                    item[price_field] = format(amount, f".{amount_precision}f")
+                                except (ValueError, TypeError):
+                                    pass
+            
+            return normalized
+            
+        except Exception as e:
+            self.logger.warning(f"Error during data normalization: {str(e)}")
+            # Return original data if normalization fails
+            return data
+    
+    def _structure_document_data(self, extracted_info: Dict[str, Any], document_type: str = None) -> Dict[str, Any]:
+        """
+        Structure document data according to the FinFlow data model.
+        
+        Args:
+            extracted_info: Raw extracted information from Document AI
+            document_type: Optional document type for specialized structuring
+            
+        Returns:
+            Dict containing structured document data
+        """
+        # Ensure we have extracted_info
+        if not extracted_info:
+            return {"document_type": document_type or "unknown"}
+        
+        # Determine document type if not provided
+        if not document_type:
+            document_type = extracted_info.get("document_type", "general")
+        
+        # Initialize with common fields
+        structured_data = {
+            "document_type": document_type,
+            "raw_text": extracted_info.get("text", ""),
+            "metadata": {
+                "confidence": extracted_info.get("confidence", 0.0),
+                "processing_time": extracted_info.get("processing_time_ms", 0),
+                "page_count": extracted_info.get("page_count", 1)
+            }
+        }
+        
+        # Get entities from extraction
+        entities = extracted_info.get("entities", {})
+        
+        # Structure based on document type
+        if document_type == "invoice":
+            structured_data.update({
+                "invoice_number": entities.get("invoice_id") or entities.get("invoice_number"),
+                "issue_date": entities.get("invoice_date") or entities.get("date"),
+                "due_date": entities.get("due_date"),
+                "total_amount": entities.get("total_amount"),
+                "subtotal": entities.get("subtotal"),
+                "tax_amount": entities.get("tax_amount"),
+                "currency": entities.get("currency"),
+                "vendor": {
+                    "name": entities.get("supplier_name") or entities.get("vendor"),
+                    "address": entities.get("supplier_address") or entities.get("vendor_address"),
+                    "tax_id": entities.get("supplier_tax_id") or entities.get("vendor_tax_id"),
+                    "phone": entities.get("supplier_phone") or entities.get("vendor_phone"),
+                    "email": entities.get("supplier_email") or entities.get("vendor_email")
+                },
+                "customer": {
+                    "name": entities.get("customer_name") or entities.get("bill_to_name"),
+                    "address": entities.get("customer_address") or entities.get("bill_to_address"),
+                    "id": entities.get("customer_id")
+                },
+                "line_items": entities.get("line_items", []),
+                "payment_terms": entities.get("payment_terms"),
+                "purchase_order": entities.get("purchase_order_number") or entities.get("po_number")
+            })
+        elif document_type == "receipt":
+            structured_data.update({
+                "receipt_number": entities.get("receipt_number") or entities.get("receipt_id"),
+                "date": entities.get("receipt_date") or entities.get("transaction_date") or entities.get("date"),
+                "time": entities.get("receipt_time") or entities.get("time"),
+                "total_amount": entities.get("total_amount"),
+                "subtotal": entities.get("subtotal"),
+                "tax_amount": entities.get("tax_amount"),
+                "tip_amount": entities.get("tip_amount"),
+                "merchant": {
+                    "name": entities.get("merchant_name") or entities.get("vendor"),
+                    "address": entities.get("merchant_address") or entities.get("store_address"),
+                    "phone": entities.get("merchant_phone") or entities.get("store_phone")
+                },
+                "payment_method": entities.get("payment_method"),
+                "currency": entities.get("currency"),
+                "line_items": entities.get("line_items", [])
+            })
+        elif document_type == "bank_statement":
+            structured_data.update({
+                "account_number": entities.get("account_number"),
+                "account_holder": entities.get("account_holder"),
+                "statement_date": entities.get("statement_date") or entities.get("date"),
+                "period_start": entities.get("period_start"),
+                "period_end": entities.get("period_end"),
+                "opening_balance": entities.get("opening_balance"),
+                "closing_balance": entities.get("closing_balance"),
+                "total_deposits": entities.get("total_deposits"),
+                "total_withdrawals": entities.get("total_withdrawals"),
+                "bank": {
+                    "name": entities.get("bank_name"),
+                    "address": entities.get("bank_address"),
+                    "identifier": entities.get("bank_identifier")
+                },
+                "transactions": entities.get("transactions", [])
+            })
+        else:
+            # For general documents, just include all entities
+            structured_data.update(entities)
+        
+        # Include any tables that were extracted
+        if "tables" in extracted_info:
+            structured_data["tables"] = extracted_info["tables"]
+        
+        return structured_data
+        
+    def _process_single_document(self, document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+        """
+        Process a single document (helper method for batch processing).
+        
+        Args:
+            document_path: Path to the document
+            tool_context: Tool context provided by ADK
+            
+        Returns:
+            Dict containing the processing result
+        """
+        try:
+            # Create context for document
+            doc_context = {
+                "document_path": document_path,
+                "processing_id": str(uuid.uuid4()),
+                "processing_start_time": datetime.now().isoformat()
+            }
+            
+            # Process with classification for best results
+            return self.process_document_with_classification(doc_context, tool_context)
+            
+        except Exception as e:
+            # Return error information
+            self.logger.error(f"Error processing document {document_path}: {str(e)}")
+            return {
+                "document_path": document_path,
+                "status": "error",
+                "message": str(e),
+                "processing_start_time": datetime.now().isoformat(),
+                "processing_end_time": datetime.now().isoformat()
+            }
+    
+    def _update_metrics(self, document_type: str, data: Dict[str, Any]) -> None:
+        """Update agent metrics with document processing result."""
+        try:
+            self.metrics["documents_processed"] += 1
+            
+            # Check if processing was successful
+            if data and data.get("document_type"):
+                self.metrics["successful_extractions"] += 1
+                
+                # Update confidence score tracking
+                confidence = data.get("metadata", {}).get("confidence", 0.0)
+                if confidence > 0:
+                    # Calculate running average
+                    current_avg = self.metrics["avg_confidence_score"] 
+                    total = self.metrics["successful_extractions"]
+                    self.metrics["avg_confidence_score"] = ((current_avg * (total - 1)) + confidence) / total
+                
+                # Track document types
+                if "document_types" not in self.metrics:
+                    self.metrics["document_types"] = {}
+                
+                if document_type not in self.metrics["document_types"]:
+                    self.metrics["document_types"][document_type] = 0
+                
+                self.metrics["document_types"][document_type] += 1
+                
+            else:
+                self.metrics["failed_extractions"] += 1
+                
+        except Exception as e:
+            self.logger.warning(f"Error updating metrics: {str(e)}")
+    
+    def get_batch_status(self, batch_id: str) -> Dict[str, Any]:
+        """
+        Get status of a batch processing job.
+        
+        Args:
+            batch_id: ID of the batch job
+            
+        Returns:
+            Status information for the batch job
+        """
+        if batch_id in self.active_batches:
+            return self.active_batches[batch_id]
+        else:
+            return {"status": "error", "message": f"Batch ID {batch_id} not found"}
+            
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get agent statistics."""
+        return {
+            "document_processor": self.name,
+            "metrics": self.metrics,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    def log_activity(self, activity_type: str, activity_data: Dict[str, Any], context: Dict[str, Any]) -> None:
+        """
+        Log agent activity for telemetry and auditing.
+        
+        Args:
+            activity_type: Type of activity (e.g., document_processing_complete)
+            activity_data: Data related to the activity
+            context: Current processing context
+        """
+        try:
+            # Only log if telemetry is enabled
+            if not self.config.get("telemetry", {}).get("enabled", False):
+                return
+                
+            log_entry = {
+                "agent": self.name,
+                "activity_type": activity_type,
+                "activity_data": activity_data,
+                "timestamp": datetime.now().isoformat(),
+                "trace_id": context.get("trace_id")
+            }
+            
+            # In a production system, this would be sent to a logging service
+            # For now, just log locally
+            self.logger.debug(f"Activity log: {json.dumps(log_entry)}")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to log activity: {str(e)}")

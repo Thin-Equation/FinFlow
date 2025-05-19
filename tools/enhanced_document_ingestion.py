@@ -43,14 +43,61 @@ SUPPORTED_FILE_TYPES = {
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
     'application/vnd.ms-excel': '.xls',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+    
+    # Text formats
+    'text/plain': '.txt',
+    'text/csv': '.csv',
+    'application/json': '.json',
+    'application/xml': '.xml',
+    'text/xml': '.xml',
+    
+    # Email formats
+    'message/rfc822': '.eml',
+    'application/vnd.ms-outlook': '.msg',
 }
 
 # Define size limits
 MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024  # 20MB limit for Document AI
 MIN_IMAGE_DIMENSION = 300  # Minimum width/height for useful OCR
+MIN_DPI = 200  # Minimum DPI for quality OCR
+MAX_PAGE_COUNT = 100  # Maximum number of pages to process
+
+# Validation settings
+VALIDATION_SETTINGS = {
+    "enforce_strict_validation": True,
+    "check_corrupt": True,
+    "check_password_protection": True,
+    "check_image_quality": True,
+    "check_malware": False,  # Requires additional libraries
+    "validate_content": True,  # Check if document has meaningful content
+    "min_text_length": 20,  # Minimum text length for a valid document
+}
+
+# Preprocess settings
+PREPROCESS_SETTINGS = {
+    "optimize_images": True,
+    "compress_pdfs": True,
+    "enhance_contrast": True,
+    "convert_to_pdf": True,  # Convert images to PDF for better handling
+    "remove_blank_pages": True,
+    "deskew": True,
+    "max_image_dimension": 3000,  # Resize large images for better processing
+}
 
 class DocumentValidationError(Exception):
     """Exception raised for document validation errors."""
+    pass
+
+class MalformedDocumentError(DocumentValidationError):
+    """Exception raised for malformed documents that cannot be processed."""
+    pass
+
+class UnsupportedDocumentError(DocumentValidationError):
+    """Exception raised for unsupported document types."""
+    pass
+
+class CorruptDocumentError(DocumentValidationError):
+    """Exception raised for corrupt document files."""
     pass
 
 class DocumentIngestionManager:
@@ -59,7 +106,10 @@ class DocumentIngestionManager:
     def __init__(self, 
                 base_storage_path: Optional[str] = None,
                 enable_cache: bool = True,
-                max_workers: int = 5):
+                max_workers: int = 10,
+                validation_settings: Optional[Dict[str, Any]] = None,
+                preprocess_settings: Optional[Dict[str, Any]] = None,
+                environment: str = "production"):
         """
         Initialize document ingestion manager.
         
@@ -67,7 +117,22 @@ class DocumentIngestionManager:
             base_storage_path: Base path for document storage
             enable_cache: Whether to enable document caching
             max_workers: Maximum number of parallel workers for batch operations
+            validation_settings: Custom validation settings
+            preprocess_settings: Custom preprocessing settings
+            environment: Environment (development, staging, production)
         """
+        # Import configuration
+        # In a real production environment, you would load from config files
+        # For this implementation we'll use the module constants
+        self.validation_settings = validation_settings or VALIDATION_SETTINGS
+        self.preprocess_settings = preprocess_settings or PREPROCESS_SETTINGS
+        self.environment = environment
+        
+        # Adjust settings based on environment
+        if environment == "development":
+            self.validation_settings["enforce_strict_validation"] = False
+            self.validation_settings["check_malware"] = False
+        
         # Storage paths
         if base_storage_path:
             self.base_path = os.path.abspath(base_storage_path)
@@ -78,26 +143,61 @@ class DocumentIngestionManager:
                 "sample_data"
             ))
         
-        # Create storage directories
-        self.raw_path = os.path.join(self.base_path, "raw")
-        self.processed_path = os.path.join(self.base_path, "processed")
-        self.rejected_path = os.path.join(self.base_path, "rejected")
+        # Create hierarchical storage with date-based organization
+        timestamp = datetime.now().strftime("%Y-%m-%d")
+        self.raw_path = os.path.join(self.base_path, "raw", timestamp)
+        self.processed_path = os.path.join(self.base_path, "processed", timestamp)
+        self.rejected_path = os.path.join(self.base_path, "rejected", timestamp)
         self.cache_path = os.path.join(self.base_path, "cache")
+        self.archive_path = os.path.join(self.base_path, "archive")
         
         # Create storage directories if they don't exist
-        for path in [self.raw_path, self.processed_path, self.rejected_path]:
+        for path in [self.raw_path, self.processed_path, self.rejected_path, self.cache_path, self.archive_path]:
             if not os.path.exists(path):
                 os.makedirs(path)
-        
-        # Create cache directory if enabled
-        if enable_cache and not os.path.exists(self.cache_path):
-            os.makedirs(self.cache_path)
         
         self.enable_cache = enable_cache
         self.max_workers = max_workers
         
-        # Track processed files for this session
-        self.processed_files: Dict[str, str] = {}  # file_hash -> processed_path
+        # Performance monitoring
+        self.stats = {
+            "start_time": datetime.now(),
+            "files_processed": 0,
+            "files_rejected": 0,
+            "processing_errors": 0,
+            "validation_errors": {},
+            "processed_bytes": 0,
+            "processing_times": [],
+        }
+        
+        # Track processed files for this session using a file hash -> path mapping
+        self.processed_files: Dict[str, str] = {}
+        
+        # Load file type validators - extensible for custom validators
+        self.validators = {
+            'application/pdf': self._validate_pdf,
+            'image/jpeg': self._validate_image,
+            'image/png': self._validate_image,
+            'image/tiff': self._validate_image,
+            'image/webp': self._validate_image,
+            'image/gif': self._validate_image,
+        }
+        
+        # Load file type preprocessors - extensible for custom preprocessors
+        self.preprocessors = {
+            'application/pdf': self._preprocess_pdf,
+            'image/jpeg': self._preprocess_image,
+            'image/png': self._preprocess_image,
+            'image/tiff': self._preprocess_image,
+            'image/webp': self._preprocess_image,
+        }
+        
+        logger.info(f"Document ingestion manager initialized in {environment} environment")
+        logger.info(f"Storage path: {self.base_path}")
+        logger.info(f"Max workers: {max_workers}")
+        logger.info(f"Cache enabled: {enable_cache}")
+        if self.environment == "production":
+            logger.info("Production mode: Strict validation enabled")  # file_hash -> processed_path
         
         # Metrics tracking
         self.metrics = {

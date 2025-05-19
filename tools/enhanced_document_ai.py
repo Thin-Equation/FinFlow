@@ -9,12 +9,13 @@ import os
 import logging
 import time
 import concurrent.futures
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+from typing import Any, Dict, List, Optional, Union
 import asyncio
-from pathlib import Path
 from datetime import datetime
 import json
 import uuid
+import random
+import hashlib
 
 # Google Cloud imports
 from google.cloud import documentai_v1 as documentai
@@ -22,9 +23,13 @@ from google.cloud import storage
 from google.api_core.exceptions import RetryError, ResourceExhausted
 from google.adk.tools import ToolContext  # type: ignore
 
+# Image and document processing
+from PIL import Image, ImageEnhance
+import fitz  # PyMuPDF
+
 # Local imports
-from tools.document_ai import process_document, analyze_financial_document
 from tools.document_ingestion import validate_document
+from config.document_processor_config import get_processor_id
 
 # Configure logging
 logger = logging.getLogger("finflow.tools.enhanced_document_ai")
@@ -34,6 +39,7 @@ class DocumentProcessor:
     
     def __init__(self, 
                  project_id: str, 
+                 environment: str = "development",
                  location: str = "us-central1", 
                  processor_config: Optional[Dict[str, Any]] = None,
                  gcs_bucket: Optional[str] = None):
@@ -42,23 +48,39 @@ class DocumentProcessor:
         
         Args:
             project_id: Google Cloud project ID
+            environment: Environment (development, staging, production)
             location: Google Cloud location for Document AI
             processor_config: Dictionary mapping document types to processor IDs
             gcs_bucket: Optional GCS bucket for batch processing
         """
         self.project_id = project_id
         self.location = location
+        self.environment = environment
         self.client = documentai.DocumentProcessorServiceClient()
         self.storage_client = storage.Client(project=project_id) if gcs_bucket else None
         self.gcs_bucket_name = gcs_bucket
         
-        # Default processor configurations
-        self.default_processor_id = f"projects/{project_id}/locations/{location}/processors/finflow-document-processor"
-        self.processor_configs = processor_config or {
-            "invoice": f"projects/{project_id}/locations/{location}/processors/finflow-invoice-processor",
-            "receipt": f"projects/{project_id}/locations/{location}/processors/finflow-receipt-processor",
-            "default": self.default_processor_id
-        }
+        # Import config-related functions
+        from config.document_processor_config import (
+            get_processor_id, get_processor_config, get_validation_settings,
+            ERROR_HANDLING, TELEMETRY, PERFORMANCE
+        )
+        
+        # Load configuration based on environment
+        self.get_processor_id = lambda doc_type: get_processor_id(doc_type, project_id, environment)
+        self.get_processor_config = lambda doc_type: get_processor_config(doc_type, environment)
+        self.validation_settings = get_validation_settings(environment)
+        
+        # Use config settings for error handling, telemetry, and performance
+        self.error_config = ERROR_HANDLING
+        self.telemetry_config = TELEMETRY
+        self.performance_config = PERFORMANCE
+        
+        # Default processor ID
+        self.default_processor_id = self.get_processor_id("general")
+        
+        # Custom processor configurations if provided
+        self.processor_configs = processor_config or {}
         
         # For tracking and telemetry
         self.process_metrics = {
@@ -66,20 +88,225 @@ class DocumentProcessor:
             "successful": 0,
             "failed": 0,
             "avg_processing_time": 0.0,
+            "confidence_scores": {},
+            "processing_times": [],
+            "error_counts": {},
+            "throughput": {
+                "last_minute": 0,
+                "last_hour": 0,
+                "last_day": 0
+            }
         }
         
-        # Error recovery settings
-        self.max_retries = 3
-        self.retry_delay = 2.0  # seconds
-        self.timeout = 300.0  # 5 minutes
+        # Initialize telemetry if enabled
+        if self.telemetry_config["collect_metrics"]:
+            self._setup_telemetry()
         
-        logger.info(f"Document processor initialized for project {project_id} in {location}")
+        # Error recovery settings from config
+        self.max_retries = self.error_config.get("max_retries", 3)
+        self.retry_delay = self.error_config.get("retry_delay_seconds", 2.0)
+        self.timeout = 300.0  # 5 minutes
+        self.exponential_backoff = self.error_config.get("exponential_backoff", True)
+        
+        # Initialize circuit breaker state
+        self.circuit_breaker = {
+            "enabled": self.error_config.get("circuit_breaker", {}).get("enabled", False),
+            "failure_count": 0,
+            "failure_threshold": self.error_config.get("circuit_breaker", {}).get("failure_threshold", 5),
+            "open": False,
+            "last_failure_time": None,
+            "reset_timeout": self.error_config.get("circuit_breaker", {}).get("reset_timeout_seconds", 300)
+        }
+        
+        # Cache setup
+        self.cache = {}
+        self.cache_enabled = self.performance_config.get("cache_enabled", True)
+        self.cache_ttl_hours = self.performance_config.get("cache_ttl_hours", 24)
+        
+        logger.info(f"Document processor initialized for project {project_id} in {location} ({environment} environment)")
+    
+    def _setup_telemetry(self) -> None:
+        """Set up telemetry collection."""
+        # Configure logging based on telemetry settings
+        log_level = getattr(logging, self.telemetry_config.get("log_level", "INFO"))
+        logger.setLevel(log_level)
+        
+        # Set up periodic reporting if enabled
+        if self.telemetry_config.get("periodic_reporting", {}).get("enabled", False):
+            import threading
+            interval = self.telemetry_config.get("periodic_reporting", {}).get("interval_minutes", 60)
+            
+            def report_metrics():
+                self._report_metrics()
+                # Schedule next report
+                threading.Timer(interval * 60, report_metrics).start()
+            
+            # Start the first report timer
+            threading.Timer(interval * 60, report_metrics).start()
+    
+    def _report_metrics(self) -> None:
+        """Report collected metrics."""
+        logger.info(f"==== Document Processor Metrics ====")
+        logger.info(f"Total documents processed: {self.process_metrics['total_documents']}")
+        logger.info(f"Successful: {self.process_metrics['successful']} - " +
+                   f"Failed: {self.process_metrics['failed']}")
+        
+        if self.process_metrics['total_documents'] > 0:
+            success_rate = (self.process_metrics['successful'] / 
+                           self.process_metrics['total_documents']) * 100
+            logger.info(f"Success rate: {success_rate:.2f}%")
+        
+        if self.process_metrics['processing_times']:
+            avg_time = sum(self.process_metrics['processing_times']) / len(self.process_metrics['processing_times'])
+            logger.info(f"Average processing time: {avg_time:.2f} seconds")
+        
+        # Log top errors if any
+        if self.process_metrics['error_counts']:
+            logger.info("Top errors:")
+            for error, count in sorted(self.process_metrics['error_counts'].items(), 
+                                      key=lambda x: x[1], reverse=True)[:3]:
+                logger.info(f"  - {error}: {count} occurrences")
 
+    def _check_circuit_breaker(self) -> bool:
+        """
+        Check if circuit breaker is open.
+        
+        Returns:
+            True if requests should be allowed, False if circuit breaker is open
+        """
+        if not self.circuit_breaker["enabled"] or not self.circuit_breaker["open"]:
+            return True
+        
+        # Check if reset timeout has passed
+        if self.circuit_breaker["last_failure_time"] is not None:
+            elapsed = time.time() - self.circuit_breaker["last_failure_time"]
+            if elapsed > self.circuit_breaker["reset_timeout"]:
+                # Reset circuit breaker
+                self.circuit_breaker["open"] = False
+                self.circuit_breaker["failure_count"] = 0
+                logger.info("Circuit breaker reset after timeout period")
+                return True
+        
+        # Circuit breaker is open and timeout hasn't passed
+        return False
+    
+    def _update_circuit_breaker(self, success: bool) -> None:
+        """Update circuit breaker state based on request success/failure."""
+        if not self.circuit_breaker["enabled"]:
+            return
+        
+        if success:
+            # On success, decrement failure count but not below zero
+            self.circuit_breaker["failure_count"] = max(0, self.circuit_breaker["failure_count"] - 1)
+        else:
+            # On failure, increment failure count and update last failure time
+            self.circuit_breaker["failure_count"] += 1
+            self.circuit_breaker["last_failure_time"] = time.time()
+            
+            # Check if threshold reached
+            if self.circuit_breaker["failure_count"] >= self.circuit_breaker["failure_threshold"]:
+                self.circuit_breaker["open"] = True
+                logger.warning(
+                    f"Circuit breaker opened after {self.circuit_breaker['failure_count']} " +
+                    f"consecutive failures. Will reset in {self.circuit_breaker['reset_timeout']} seconds."
+                )
+    
+    def _calculate_retry_delay(self, attempt: int) -> float:
+        """
+        Calculate delay time before retry based on attempt number.
+        
+        Args:
+            attempt: The attempt number (0-based)
+            
+        Returns:
+            Delay time in seconds
+        """
+        if self.exponential_backoff:
+            # Exponential backoff with jitter: base * 2^attempt + random jitter
+            base_delay = self.retry_delay * (2 ** attempt)
+            jitter = base_delay * 0.1 * (2 * (0.5 - random.random()))  # 10% jitter
+            return base_delay + jitter
+        else:
+            # Fixed delay with small jitter
+            jitter = self.retry_delay * 0.1 * (2 * (0.5 - random.random()))
+            return self.retry_delay + jitter
+    
+    def _document_fingerprint(self, content: bytes, metadata: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate a unique fingerprint for a document to enable caching.
+        
+        Args:
+            content: Document content bytes
+            metadata: Optional metadata to include in fingerprint
+            
+        Returns:
+            Document fingerprint as string
+        """
+        # Generate SHA-256 hash of content
+        hasher = hashlib.sha256()
+        hasher.update(content)
+        
+        # Add metadata to hash if provided
+        if metadata:
+            metadata_str = json.dumps(metadata, sort_keys=True)
+            hasher.update(metadata_str.encode())
+        
+        return hasher.hexdigest()
+    
+    def _check_cache(self, fingerprint: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if document is in cache.
+        
+        Args:
+            fingerprint: Document fingerprint
+            
+        Returns:
+            Cached result or None if not found
+        """
+        if not self.cache_enabled:
+            return None
+        
+        cache_entry = self.cache.get(fingerprint)
+        if not cache_entry:
+            return None
+        
+        # Check if entry is expired
+        timestamp, result = cache_entry
+        cache_ttl_seconds = self.cache_ttl_hours * 3600
+        if time.time() - timestamp > cache_ttl_seconds:
+            # Entry expired, remove from cache
+            del self.cache[fingerprint]
+            return None
+        
+        logger.info(f"Cache hit for document {fingerprint[:8]}")
+        return result
+    
+    def _update_cache(self, fingerprint: str, result: Dict[str, Any]) -> None:
+        """
+        Update cache with document processing result.
+        
+        Args:
+            fingerprint: Document fingerprint
+            result: Processing result
+        """
+        if not self.cache_enabled:
+            return
+        
+        self.cache[fingerprint] = (time.time(), result)
+        
+        # Prune cache if it gets too large (over 1000 entries)
+        if len(self.cache) > 1000:
+            # Remove oldest 20% of entries
+            entries = sorted(self.cache.items(), key=lambda x: x[1][0])
+            for key, _ in entries[:200]:
+                del self.cache[key]
+    
     def process_single_document(self, 
                                content: Union[bytes, str], 
                                document_type: Optional[str] = None,
                                mime_type: Optional[str] = None,
-                               processor_id: Optional[str] = None) -> Dict[str, Any]:
+                               processor_id: Optional[str] = None,
+                               metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Process a single document with retry logic and error handling.
         
@@ -88,22 +315,256 @@ class DocumentProcessor:
             document_type: Type of document (invoice, receipt, etc.)
             mime_type: MIME type of the document
             processor_id: Override default processor ID
+            metadata: Optional metadata to include with the document
             
         Returns:
             Dict with processing results or error information
         """
         start_time = time.time()
         processing_id = str(uuid.uuid4())
+        doc_type = document_type or "general"
+        
+        # Check circuit breaker first
+        if not self._check_circuit_breaker():
+            error_msg = "Circuit breaker open, request rejected"
+            logger.warning(f"{error_msg} (document type: {doc_type})")
+            
+            if self.error_config.get("log_detailed_errors", True):
+                logger.info(f"Circuit breaker state: {self.circuit_breaker}")
+            
+            return {
+                "status": "error",
+                "error_type": "circuit_breaker_open",
+                "message": error_msg,
+                "processing_id": processing_id,
+                "timestamp": datetime.now().isoformat()
+            }
         
         try:
             # Convert file path to content if needed
             if isinstance(content, str) and os.path.exists(content):
                 with open(content, 'rb') as f:
                     content = f.read()
-                # Auto-detect MIME type if not provided
-                if not mime_type:
-                    import magic
-                    mime_type = magic.from_buffer(content, mime=True)
+                    
+            # Generate fingerprint for caching
+            if isinstance(content, bytes):
+                fingerprint = self._document_fingerprint(content, metadata)
+                
+                # Check cache
+                cached_result = self._check_cache(fingerprint)
+                if cached_result:
+                    # Update metrics for cached results
+                    self.process_metrics["total_documents"] += 1
+                    self.process_metrics["successful"] += 1
+                    
+                    # Add cache metadata
+                    cached_result["from_cache"] = True
+                    cached_result["processing_id"] = processing_id
+                    return cached_result
+            else:
+                # Content is neither bytes nor a valid file path
+                raise ValueError("Content must be either bytes or a valid file path")
+                
+            # Determine mime type if not provided
+            if not mime_type:
+                import magic
+                mime_type = magic.from_buffer(content, mime=True)
+                
+            # Choose processor based on document type or use provided processor_id
+            if not processor_id:
+                if document_type:
+                    processor_id = self.get_processor_id(document_type)
+                else:
+                    processor_id = self.default_processor_id
+                
+            # Get processor configuration for timeout settings
+            processor_timeout = 120  # default timeout in seconds
+            if document_type:
+                config = self.get_processor_config(document_type)
+                processor_timeout = config.get("processor_timeout_seconds", processor_timeout)
+            
+            # Initialize result structure
+            result = {
+                "status": "processing",
+                "document_type": document_type,
+                "processing_id": processing_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Process with retry logic
+            for attempt in range(self.max_retries + 1):
+                try:
+                    # Create Document AI document object
+                    document = {"content": content, "mime_type": mime_type}
+                    
+                    # Prepare request with optional metadata
+                    request = {"name": processor_id, "document": document}
+                    if metadata:
+                        request["document_metadata"] = metadata
+                    
+                    # Process the document with timeout
+                    logger.info(f"Processing document {processing_id} (attempt {attempt+1}/{self.max_retries+1})")
+                    
+                    # Set timeout for this request
+                    from google.api_core import retry_async
+                    from google.api_core import gapic_v1
+                    
+                    # Create custom retry strategy
+                    retry = retry_async.AsyncRetry(
+                        predicate=retry_async.if_exception_type(
+                            ConnectionError,
+                            TimeoutError
+                        ),
+                        maximum=3,
+                    )
+                    
+                    # Create timeout object
+                    timeout = gapic_v1.method.DEFAULT.with_timeout(processor_timeout)
+                    
+                    # Process document with retry and timeout settings
+                    api_result = self.client.process_document(
+                        request=request,
+                        retry=retry,
+                        timeout=timeout
+                    )
+                    
+                    # Extract and format results
+                    processed_result = self._extract_document_data(api_result.document, doc_type)
+                    
+                    # Add metadata
+                    processed_result["processing_id"] = processing_id
+                    processed_result["status"] = "success"
+                    processed_result["processing_time"] = time.time() - start_time
+                    processed_result["attempts"] = attempt + 1
+                    processed_result["timestamp"] = datetime.now().isoformat()
+                    
+                    # Update metrics
+                    self.process_metrics["total_documents"] += 1
+                    self.process_metrics["successful"] += 1
+                    self.process_metrics["avg_processing_time"] = (
+                        (self.process_metrics["avg_processing_time"] * (self.process_metrics["successful"] - 1) +
+                         processed_result["processing_time"]) / self.process_metrics["successful"]
+                    )
+                    self.process_metrics["processing_times"].append(processed_result["processing_time"])
+                    
+                    # Update circuit breaker
+                    self._update_circuit_breaker(True)
+                    
+                    # Cache the result
+                    if isinstance(content, bytes):
+                        self._update_cache(fingerprint, processed_result)
+                    
+                    return processed_result
+                
+                except (RetryError, ResourceExhausted, ConnectionError, TimeoutError) as e:
+                    error_type = type(e).__name__
+                    error_msg = str(e)
+                    
+                    if attempt < self.max_retries:
+                        # Calculate retry delay with backoff
+                        delay = self._calculate_retry_delay(attempt)
+                        
+                        logger.warning(
+                            f"Retryable error ({error_type}) processing document {processing_id}: "
+                            f"{error_msg}. Retrying in {delay:.2f}s. Attempt {attempt+1}/{self.max_retries}"
+                        )
+                        
+                        # Wait before retrying
+                        time.sleep(delay)
+                    else:
+                        # All retries exhausted
+                        logger.error(
+                            f"Failed to process document {processing_id} after {self.max_retries + 1} attempts: "
+                            f"{error_type}: {error_msg}"
+                        )
+                        
+                        # Update metrics
+                        self.process_metrics["total_documents"] += 1
+                        self.process_metrics["failed"] += 1
+                        
+                        # Track error type
+                        error_key = error_type
+                        if error_key not in self.process_metrics["error_counts"]:
+                            self.process_metrics["error_counts"][error_key] = 0
+                        self.process_metrics["error_counts"][error_key] += 1
+                        
+                        # Update circuit breaker
+                        self._update_circuit_breaker(False)
+                        
+                        # Return error result
+                        return {
+                            "status": "error",
+                            "error_type": error_type,
+                            "message": error_msg,
+                            "processing_time": time.time() - start_time,
+                            "attempts": self.max_retries + 1,
+                            "processing_id": processing_id,
+                            "document_type": document_type,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                
+                except Exception as e:
+                    error_type = type(e).__name__
+                    error_msg = str(e)
+                    
+                    # Log the error
+                    logger.error(
+                        f"Unexpected error processing document {processing_id}: "
+                        f"{error_type}: {error_msg}"
+                    )
+                    
+                    # Update metrics
+                    self.process_metrics["total_documents"] += 1
+                    self.process_metrics["failed"] += 1
+                    
+                    # Track error type
+                    error_key = error_type
+                    if error_key not in self.process_metrics["error_counts"]:
+                        self.process_metrics["error_counts"][error_key] = 0
+                    self.process_metrics["error_counts"][error_key] += 1
+                    
+                    # Update circuit breaker
+                    self._update_circuit_breaker(False)
+                    
+                    # Return error result
+                    return {
+                        "status": "error",
+                        "error_type": error_type,
+                        "message": error_msg,
+                        "processing_time": time.time() - start_time,
+                        "processing_id": processing_id,
+                        "document_type": document_type,
+                        "timestamp": datetime.now().isoformat()
+                    }
+        
+        except Exception as e:
+            error_type = type(e).__name__
+            error_msg = str(e)
+            
+            # Log the error
+            logger.error(
+                f"Error preparing document {processing_id} for processing: "
+                f"{error_type}: {error_msg}"
+            )
+            
+            # Update metrics
+            self.process_metrics["total_documents"] += 1
+            self.process_metrics["failed"] += 1
+            
+            # Return error result
+            return {
+                "status": "error",
+                "error_type": error_type,
+                "message": error_msg,
+                "processing_time": time.time() - start_time,
+                "processing_id": processing_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Auto-detect MIME type if not provided
+            if not mime_type:
+                import magic
+                mime_type = magic.from_buffer(content, mime=True)
             
             # Ensure content is bytes
             if not isinstance(content, bytes):
@@ -180,81 +641,329 @@ class DocumentProcessor:
                 "error_type": type(e).__name__
             }
 
-    def batch_process_documents(self, 
-                               document_paths: List[str], 
-                               document_types: Optional[List[str]] = None,
-                               max_workers: int = 5) -> Dict[str, Any]:
+    def batch_process_documents(self, document_paths: List[str], max_workers: int = 5, 
+                           batch_size: int = 20, destination_folder: Optional[str] = None) -> Dict[str, Any]:
         """
         Process multiple documents in parallel.
         
         Args:
-            document_paths: List of paths to documents
-            document_types: Optional list of document types (same length as document_paths)
+            document_paths: List of paths to the documents to process
             max_workers: Maximum number of parallel workers
+            batch_size: Size of batches to process
+            destination_folder: Optional folder to store processed results
             
         Returns:
-            Dict with batch processing results
+            Dictionary with batch processing results
         """
-        start_time = time.time()
-        batch_id = str(uuid.uuid4())
-        results = []
+        # Validate inputs
+        if not document_paths:
+            return {"status": "error", "message": "No documents provided"}
         
-        # Normalize document_types to match document_paths length
-        if document_types is None:
-            document_types = [None] * len(document_paths)
-        elif len(document_types) != len(document_paths):
-            raise ValueError("document_types must have the same length as document_paths")
+        # Create processing context
+        processing_id = str(uuid.uuid4())
+        logger.info(f"Starting batch processing {processing_id} with {len(document_paths)} documents")
         
-        try:
-            # Process documents in parallel
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_doc = {
-                    executor.submit(
-                        self.process_single_document, 
-                        path, 
-                        doc_type
-                    ): (path, doc_type) for path, doc_type in zip(document_paths, document_types)
-                }
-                
-                for future in concurrent.futures.as_completed(future_to_doc):
-                    doc_path, doc_type = future_to_doc[future]
-                    try:
-                        result = future.result()
-                        result["document_path"] = doc_path
-                        results.append(result)
-                    except Exception as exc:
-                        # Handle unexpected errors
-                        logger.error(f"Exception processing {doc_path}: {exc}")
-                        results.append({
-                            "status": "error",
-                            "document_path": doc_path,
-                            "document_type": doc_type or "unknown",
-                            "error": str(exc),
-                            "error_type": type(exc).__name__
-                        })
-            
-            # Summarize results
-            successful = sum(1 for r in results if r["status"] == "success")
-            
-            return {
-                "status": "success" if successful == len(document_paths) else "partial_success" if successful > 0 else "error",
-                "batch_id": batch_id,
-                "total_documents": len(document_paths),
-                "successful_count": successful,
-                "failed_count": len(document_paths) - successful,
-                "processing_time": time.time() - start_time,
-                "results": results
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in batch processing {batch_id}: {str(e)}")
+        # Check circuit breaker
+        if not self._check_circuit_breaker():
+            self._update_circuit_breaker(success=False)
             return {
                 "status": "error",
-                "batch_id": batch_id,
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "processing_time": time.time() - start_time
+                "message": "Circuit breaker is open due to previous failures",
+                "processing_id": processing_id
             }
+        
+        # Limit batch size to avoid overloading
+        if len(document_paths) > batch_size:
+            document_paths = document_paths[:batch_size]
+            logger.warning(f"Limited batch to {batch_size} documents")
+        
+        # Results tracking
+        results = {}
+        success_count = 0
+        failed_count = 0
+        total_time = 0.0
+        
+        # Track start time
+        start_time = time.time()
+        
+        # Process documents in parallel
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Create tasks dictionary to keep track of futures
+                future_to_path = {
+                    executor.submit(self._process_document_with_retry, path, destination_folder): path
+                    for path in document_paths
+                }
+                
+                # Process results as they complete
+                for future in concurrent.futures.as_completed(future_to_path):
+                    path = future_to_path[future]
+                    try:
+                        result = future.result()
+                        results[path] = result
+                        
+                        # Update metrics
+                        if result.get('status') == 'success':
+                            success_count += 1
+                            # Collect processing time for metrics
+                            if 'processing_time' in result:
+                                total_time += result['processing_time']
+                        else:
+                            failed_count += 1
+                            # Track error type for metrics
+                            error_type = result.get('error_type', 'unknown')
+                            if 'error_counts' not in self.process_metrics:
+                                self.process_metrics['error_counts'] = {}
+                            if error_type not in self.process_metrics['error_counts']:
+                                self.process_metrics['error_counts'][error_type] = 0
+                            self.process_metrics['error_counts'][error_type] += 1
+                    
+                    except Exception as e:
+                        # Handle exceptions from the future
+                        logger.error(f"Error processing {path}: {str(e)}")
+                        results[path] = {
+                            'status': 'error',
+                            'message': f"Exception during processing: {str(e)}",
+                            'path': path
+                        }
+                        failed_count += 1
+        
+        except Exception as e:
+            # Handle exceptions from the executor itself
+            logger.error(f"Batch processing error: {str(e)}")
+            self._update_circuit_breaker(success=False)
+            return {
+                "status": "error",
+                "message": f"Batch processing failed: {str(e)}",
+                "processing_id": processing_id,
+                "results": results,
+                "success_count": success_count, 
+                "failed_count": failed_count,
+                "elapsed_time": time.time() - start_time
+            }
+        
+        # Calculate batch metrics
+        total_processed = success_count + failed_count
+        success_rate = (success_count / total_processed * 100) if total_processed > 0 else 0
+        avg_time_per_doc = (total_time / success_count) if success_count > 0 else 0
+        
+        # Update processor metrics
+        self.process_metrics["total_documents"] += total_processed
+        self.process_metrics["successful"] += success_count
+        self.process_metrics["failed"] += failed_count
+        
+        if success_count > 0:
+            # Update average processing time
+            if not self.process_metrics["processing_times"]:
+                self.process_metrics["processing_times"] = []
+            self.process_metrics["processing_times"].append(avg_time_per_doc)
+            
+            # Calculate new running average
+            avg_processing_time = sum(self.process_metrics["processing_times"]) / len(self.process_metrics["processing_times"])
+            self.process_metrics["avg_processing_time"] = avg_processing_time
+        
+        # Calculate overall elapsed time
+        elapsed_time = time.time() - start_time
+        
+        # Log completion
+        logger.info(f"Batch {processing_id} completed in {elapsed_time:.2f}s: {success_count} success, " +
+                   f"{failed_count} failed ({success_rate:.1f}% success rate)")
+        
+        # Return detailed results
+        return {
+            "status": "completed",
+            "processing_id": processing_id,
+            "results": results,
+            "processed_count": total_processed,
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "success_rate": success_rate,
+            "avg_processing_time": avg_time_per_doc,
+            "elapsed_time": elapsed_time
+        }
+        
+    def _process_document_with_retry(self, document_path: str, 
+                                   destination_folder: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Process document with automatic retry and error handling.
+        
+        Args:
+            document_path: Path to document to process
+            destination_folder: Optional destination folder for results
+            
+        Returns:
+            Document processing result
+        """
+        # Check if document exists
+        if not os.path.exists(document_path):
+            return {
+                "status": "error", 
+                "message": f"Document not found: {document_path}",
+                "error_type": "file_not_found"
+            }
+            
+        # Generate processing ID for tracking
+        processing_id = str(uuid.uuid4())
+        
+        # Initial retry delay
+        retry_delay = self.retry_delay
+        
+        # Attempt processing with retry
+        for attempt in range(self.max_retries + 1):  # +1 for initial attempt
+            try:
+                if attempt > 0:
+                    logger.info(f"Retry {attempt}/{self.max_retries} for {document_path} (ID: {processing_id})")
+                    
+                # Process document (this calls the method we defined earlier)
+                result = self.process_document(
+                    document_path=document_path,
+                    destination_folder=destination_folder
+                )
+                
+                # If successful, update circuit breaker and return result
+                if result.get("status") != "error":
+                    self._update_circuit_breaker(success=True)
+                    return result
+                    
+                # If we reach here, processing failed but didn't throw an exception
+                logger.warning(f"Processing failed (attempt {attempt+1}/{self.max_retries+1}): {result.get('message')}")
+                
+                # Special handling for rate limiting
+                if "rate limit" in result.get("message", "").lower():
+                    # Use a longer delay for rate limits
+                    time.sleep(min(retry_delay * 2, 10))
+                elif attempt < self.max_retries:  # Don't sleep on the last attempt
+                    # Use exponential backoff if configured
+                    current_delay = retry_delay * (2 ** attempt) if self.exponential_backoff else retry_delay
+                    time.sleep(current_delay)
+                    
+            except Exception as e:
+                logger.error(f"Processing error (attempt {attempt+1}/{self.max_retries+1}): {str(e)}")
+                
+                if attempt < self.max_retries:  # Don't sleep on the last attempt
+                    # Use exponential backoff if configured
+                    current_delay = retry_delay * (2 ** attempt) if self.exponential_backoff else retry_delay
+                    time.sleep(current_delay)
+        
+        # If we reached here, all attempts failed
+        self._update_circuit_breaker(success=False)
+        
+        # Check if circuit breaker threshold exceeded
+        if self.circuit_breaker["enabled"] and self.circuit_breaker["failure_count"] >= self.circuit_breaker["failure_threshold"]:
+            self.circuit_breaker["open"] = True
+            self.circuit_breaker["last_failure_time"] = time.time()
+            logger.warning("Circuit breaker opened due to consecutive failures")
+        
+        # Return error
+        return {
+            "status": "error",
+            "message": f"Document processing failed after {self.max_retries + 1} attempts",
+            "path": document_path,
+            "processing_id": processing_id,
+            "error_type": "max_retries_exceeded"
+        }
+
+    def optimize_document_for_processing(self, document_path: str) -> str:
+        """
+        Optimize a document for better processing results.
+        
+        Args:
+            document_path: Path to the document to optimize
+            
+        Returns:
+            Path to optimized document (may be the same as input if optimization not needed)
+        """
+        try:
+            # Check if optimization is needed
+            _, ext = os.path.splitext(document_path.lower())
+            
+            # PDF optimization
+            if ext == '.pdf':
+                # Start with basic checks
+                is_optimized = self._check_if_optimized(document_path)
+                
+                if is_optimized:
+                    logger.debug(f"Document {document_path} is already optimized")
+                    return document_path
+                
+                # Create optimized version
+                optimized_path = self._get_optimized_path(document_path)
+                
+                # Use PyMuPDF to optimize
+                doc = fitz.open(document_path)
+                
+                # Check and process each page
+                for page_num in range(len(doc)):
+                    page = doc[page_num]
+                    # Perform optimization actions here
+                    # In a production system, you would implement:
+                    # - OCR if needed
+                    # - Image compression
+                    # - Text extraction and enhancement
+                    pass
+                    
+                # Save optimized document
+                doc.save(optimized_path)
+                doc.close()
+                
+                logger.info(f"Optimized document saved to {optimized_path}")
+                return optimized_path
+                
+            # Image optimization
+            elif ext in ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp']:
+                # Create optimized version
+                optimized_path = self._get_optimized_path(document_path)
+                
+                # Open and optimize image
+                with Image.open(document_path) as img:
+                    # Resize if too large
+                    max_dimension = 3000  # Max dimension for Document AI
+                    if img.width > max_dimension or img.height > max_dimension:
+                        # Resize while maintaining aspect ratio
+                        ratio = min(max_dimension / img.width, max_dimension / img.height)
+                        new_size = (int(img.width * ratio), int(img.height * ratio))
+                        img = img.resize(new_size, Image.LANCZOS)
+                    
+                    # Enhance contrast
+                    enhancer = ImageEnhance.Contrast(img)
+                    img = enhancer.enhance(1.2)  # Increase contrast by 20%
+                    
+                    # Convert to RGB if needed
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    
+                    # Save optimized image
+                    img.save(optimized_path, optimize=True, quality=85)
+                
+                logger.info(f"Optimized image saved to {optimized_path}")
+                return optimized_path
+                
+            # Other file types
+            else:
+                # No optimization needed/available
+                return document_path
+                
+        except Exception as e:
+            logger.error(f"Error optimizing document {document_path}: {str(e)}")
+            # Return original document path on error
+            return document_path
+            
+    def _check_if_optimized(self, document_path: str) -> bool:
+        """Check if a document is already optimized."""
+        return 'optimized' in document_path.lower()
+        
+    def _get_optimized_path(self, document_path: str) -> str:
+        """Get path for optimized version of document."""
+        # Get directory, filename, and extension
+        directory = os.path.dirname(document_path)
+        filename = os.path.basename(document_path)
+        name, ext = os.path.splitext(filename)
+        
+        # Create optimized filename
+        optimized_filename = f"{name}_optimized{ext}"
+        
+        # Return optimized path
+        return os.path.join(directory, optimized_filename)
 
     async def batch_process_documents_async(self, 
                                           document_paths: List[str], 
@@ -632,20 +1341,40 @@ class DocumentProcessor:
 
 def create_processor_instance(config: Dict[str, Any]) -> DocumentProcessor:
     """
-    Create a DocumentProcessor instance from configuration.
+    Create and initialize a DocumentProcessor instance.
     
     Args:
-        config: Configuration dictionary with project_id, location, etc.
+        config: Configuration dictionary for the processor
         
     Returns:
-        DocumentProcessor instance
+        Initialized DocumentProcessor instance
     """
-    return DocumentProcessor(
-        project_id=config.get("project_id"),
-        location=config.get("location", "us-central1"),
-        processor_config=config.get("processor_config"),
-        gcs_bucket=config.get("gcs_bucket")
-    )
+    try:
+        # Extract configuration parameters
+        project_id = config.get("project_id")
+        if not project_id:
+            raise ValueError("Project ID must be provided")
+            
+        location = config.get("location", "us-central1")
+        environment = config.get("environment", "development")
+        processor_config = config.get("processor_config", {})
+        gcs_bucket = config.get("gcs_bucket")
+        
+        # Create the document processor
+        processor = DocumentProcessor(
+            project_id=project_id,
+            environment=environment,
+            location=location,
+            processor_config=processor_config,
+            gcs_bucket=gcs_bucket
+        )
+        
+        logger.info(f"Document processor initialized for project {project_id} in {location}")
+        return processor
+        
+    except Exception as e:
+        logger.error(f"Failed to create document processor: {str(e)}")
+        raise
 
 def process_document_with_classification(file_path: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -705,61 +1434,138 @@ def batch_process_folder(folder_path: str, config: Dict[str, Any], pattern: str 
 
 # Adapter functions for ADK tools
 
-def process_document_with_classification_adapter(document_path: str, 
-                                               tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+def process_document_with_classification_adapter(document_path: str, tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
     """
-    Adapter function for processing a document with classification for ADK tools.
+    Process a document with automatic classification and optimal processor selection.
+    
+    This is an adapter function that can be called via ADK tools framework.
     
     Args:
-        document_path: Path to the document file
-        tool_context: Tool context from ADK
+        document_path: Path to the document to process
+        tool_context: ADK tool context
         
     Returns:
-        Dict with processing results
+        Document processing result with classification
     """
-    # Get configuration from tool context or default
-    config = {"project_id": "YOUR_PROJECT", "location": "us-central1"}
-    
-    if tool_context:
-        if hasattr(tool_context, "get"):
-            project_id = tool_context.get("project_id")  # type: ignore
-            if project_id:
-                config["project_id"] = project_id
-                
-            location = tool_context.get("location")  # type: ignore
-            if location:
-                config["location"] = location
-    
-    # Process the document with classification
-    return process_document_with_classification(document_path, config)
+    try:
+        # Validate input
+        if not document_path or not os.path.exists(document_path):
+            return {"status": "error", "message": f"Invalid or missing document: {document_path}"}
+            
+        # Get context parameters if available
+        project_id = None
+        if tool_context:
+            project_id = getattr(tool_context, "project_id", None)
+            
+        # If no project ID, try to get it from config
+        if not project_id:
+            from config.config_loader import load_config
+            config = load_config()
+            project_id = config.get('google_cloud', {}).get('project_id')
+        
+        # First, classify the document
+        from tools.document_classification import classify_document
+        classification_result = classify_document(document_path)
+        
+        document_type = classification_result.get("document_type", "general")
+        confidence = classification_result.get("confidence", 0.0)
+        
+        logger.info(f"Document classified as {document_type} with confidence {confidence}")
+        
+        # Get appropriate processor ID for the document type
+        from config.document_processor_config import get_processor_id
+        processor_id = get_processor_id(document_type, project_id)
+        
+        # Initialize processor for this document
+        processor_config = {
+            "project_id": project_id,
+            "processor_config": {document_type: processor_id}
+        }
+        
+        processor = create_processor_instance(processor_config)
+        
+        # Process the document
+        result = processor.process_document(document_path, processor_id=processor_id, document_type=document_type)
+        
+        # Add classification info to result
+        result["document_type"] = document_type
+        result["classification"] = classification_result
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in document processing with classification: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Document processing failed: {str(e)}",
+            "document_path": document_path
+        }
 
-def batch_process_documents_adapter(file_paths: List[str], 
-                                  tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+def batch_process_documents_adapter(file_paths: List[str], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
     """
-    Adapter function for batch processing documents for ADK tools.
+    Process multiple documents in parallel with automatic classification.
+    
+    This is an adapter function that can be called via ADK tools framework.
     
     Args:
-        file_paths: List of paths to document files
-        tool_context: Tool context from ADK
+        file_paths: List of paths to documents to process
+        tool_context: ADK tool context
         
     Returns:
-        Dict with batch processing results
+        Batch processing results
     """
-    # Get configuration from tool context or default
-    config = {"project_id": "YOUR_PROJECT", "location": "us-central1"}
-    
-    if tool_context:
-        if hasattr(tool_context, "get"):
-            project_id = tool_context.get("project_id")  # type: ignore
-            if project_id:
-                config["project_id"] = project_id
-                
-            location = tool_context.get("location")  # type: ignore
-            if location:
-                config["location"] = location
-    
-    # Create processor instance
-    processor = create_processor_instance(config)
-    
-    # Process documents in batch
-    return processor.batch_process_documents(file_paths)
+    try:
+        # Validate input
+        if not file_paths:
+            return {"status": "error", "message": "No file paths provided"}
+            
+        # Get context parameters if available
+        project_id = None
+        max_workers = 5  # Default
+        
+        if tool_context:
+            project_id = getattr(tool_context, "project_id", None)
+            max_workers_param = getattr(tool_context, "max_workers", None)
+            if max_workers_param:
+                try:
+                    max_workers = int(max_workers_param)
+                except ValueError:
+                    pass
+            
+        # If no project ID, try to get it from config
+        if not project_id:
+            from config.config_loader import load_config
+            config = load_config()
+            project_id = config.get('google_cloud', {}).get('project_id')
+            
+        # Get processor configuration
+        from config.document_processor_config import PROCESSOR_CONFIGS
+        
+        # Initialize processor
+        processor_config = {
+            "project_id": project_id,
+            "processor_config": {
+                doc_type: get_processor_id(doc_type, project_id)
+                for doc_type in PROCESSOR_CONFIGS.keys()
+            }
+        }
+        
+        processor = create_processor_instance(processor_config)
+        
+        # Process documents in batch
+        max_batch_size = min(50, len(file_paths))  # Document AI has limits
+        
+        return processor.batch_process_documents(
+            file_paths,
+            max_workers=max_workers,
+            batch_size=max_batch_size
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in batch document processing: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Batch document processing failed: {str(e)}",
+            "file_count": len(file_paths),
+            "processed_count": 0
+        }
