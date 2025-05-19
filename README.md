@@ -20,10 +20,21 @@ The system consists of several specialized agents:
 2. **Document Processor** - Extracts information from documents
 3. **Rule Retrieval** - Retrieves compliance rules
 4. **Validation** - Validates documents against rules
-5. **Storage** - Manages data persistence
+5. **Storage** - Manages data persistence in BigQuery and other storage systems
 6. **Analytics** - Generates financial insights
 
 For more details, see [Agent Architecture](docs/agent_architecture.md).
+
+### Storage Agent
+The StorageAgent is responsible for all database operations in the FinFlow system. It provides:
+
+- Comprehensive BigQuery dataset and schema management
+- Document and entity storage with optimized data access patterns
+- Financial data analysis and reporting capabilities
+- Relationship tracking between financial documents
+- Caching layer for performance optimization
+
+For more details, see [Storage Agent Documentation](docs/storage_agent.md).
 
 ## Setup
 

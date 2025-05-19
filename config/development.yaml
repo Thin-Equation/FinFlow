@@ -4,3 +4,18 @@
 google_cloud:
   project_id: "finflow-hackathon"
   credentials_path: "/Users/dhairyagundechia/.config/gcloud/application_default_credentials.json"
+
+# BigQuery settings
+bigquery:
+  project_id: "finflow-hackathon"
+  dataset_id: "finflow_dev"
+  location: "US"
+
+# Storage settings
+storage:
+  enable_cache: true
+  cache_ttl_seconds: 300
+  max_cache_size: 100
+  batch_size: 100
+  retry_attempts: 3
+  timeout_seconds: 30

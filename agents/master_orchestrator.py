@@ -12,7 +12,6 @@ from agents.base_agent import BaseAgent
 
 # Forward references for type hints
 DocumentProcessorAgent = Any
-RuleRetrievalAgent = Any
 ValidationAgent = Any
 StorageAgent = Any
 AnalyticsAgent = Any
@@ -28,7 +27,6 @@ class MasterOrchestratorAgent(BaseAgent):
     def __init__(
         self,
         document_processor: Optional[DocumentProcessorAgent] = None,
-        rule_retrieval: Optional[RuleRetrievalAgent] = None,
         validation_agent: Optional[ValidationAgent] = None,
         storage_agent: Optional[StorageAgent] = None,
         analytics_agent: Optional[AnalyticsAgent] = None,
@@ -37,7 +35,6 @@ class MasterOrchestratorAgent(BaseAgent):
         
         Args:
             document_processor: Document processor agent instance.
-            rule_retrieval: Rule retrieval agent instance.
             validation_agent: Validation agent instance.
             storage_agent: Storage agent instance.
             analytics_agent: Analytics agent instance.
@@ -56,7 +53,6 @@ class MasterOrchestratorAgent(BaseAgent):
         # Initialize worker agents dictionary
         self.worker_agents = {
             "document_processor": document_processor,
-            "rule_retrieval": rule_retrieval,
             "validation_agent": validation_agent,
             "storage_agent": storage_agent,
             "analytics_agent": analytics_agent,
