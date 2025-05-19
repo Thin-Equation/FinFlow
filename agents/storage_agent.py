@@ -11,10 +11,9 @@ This agent is responsible for all database operations including:
 
 import json
 import uuid
-import logging
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Set, TypedDict, Union, cast
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
 from google.adk.tools import BaseTool, ToolContext  # type: ignore
 from pydantic import BaseModel
