@@ -6,7 +6,7 @@ import logging
 import json
 import traceback
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar
 
 # Google ADK imports with type ignores for dependencies
 from google.adk.agents import LlmAgent  # type: ignore
@@ -41,8 +41,17 @@ class BaseAgent(LlmAgent):
             tools: List of tools to add to the agent.
             temperature: The temperature for the agent's model.
         """
-        # Create logger before initializing parent to avoid Pydantic validation issues
-        self.__dict__["logger"] = logging.getLogger(f"finflow.agents.{name}")
+        # Create a proper logger and configure it
+        logger = logging.getLogger(f"finflow.agents.{name}")
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.DEBUG)
+        
+        # Store logger in __dict__ to bypass Pydantic validation
+        self.__dict__["logger"] = logger
         
         # Call parent constructor with necessary parameters
         # We need to use type: ignore because of complex typing in ADK
@@ -54,14 +63,34 @@ class BaseAgent(LlmAgent):
             # Temperature is not directly supported in the constructor
         )
         
-        # Explicitly add a type-annotated add_tool method to handle typing issues
-        # The original is inherited from LlmAgent but needs explicit typing for TypeScript
-        self.add_tool: Callable[[BaseTool], None]
+        # Get logger from __dict__
+        logger = self.__dict__.get("logger")
+        
+        # Define a direct implementation of add_tool since parent doesn't have it
+        def add_tool_impl(tool: BaseTool) -> None:
+            """Implementation of add_tool that stores tools in the agent."""
+            if logger:
+                logger.debug(f"Adding tool: {tool.name}")
+            
+            # Store the tool in the agent's tools collection
+            if "tools" not in self.__dict__:
+                self.__dict__["tools"] = []
+                
+            self.__dict__["tools"].append(tool)
+            
+            # In a real implementation, this would register the tool with the LlmAgent
+            # but since that's not available, we'll just store it
+        
+        # Store directly in __dict__ to avoid Pydantic validation issues
+        self.__dict__["add_tool"] = add_tool_impl
+        
+        # Also add it as a method to the class for easier access from child classes
+        setattr(self.__class__, "add_tool", add_tool_impl)
         
         # Add tools if provided
         if tools:
             for tool in tools:
-                self.add_tool(tool)
+                self.__dict__["add_tool"](tool)
     
     def log_context(self, context: Dict[str, Any]) -> None:
         """Log the current context for debugging purposes."""

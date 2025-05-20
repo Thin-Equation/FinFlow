@@ -114,6 +114,16 @@ class StorageAgent(BaseAgent):
         self.__dict__["config_loader"] = config_loader
         self.__dict__["config"] = config if config else config_loader.load_config()
         
+        # Initialize logger explicitly 
+        import logging
+        self.logger = logging.getLogger(f"finflow.agents.FinFlow_Storage")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.DEBUG)
+        
         # Extract BigQuery configuration
         bigquery_config = BigQueryConfig(
             project_id=self.__dict__["config"].get("bigquery", {}).get("project_id", ""),
@@ -136,7 +146,7 @@ class StorageAgent(BaseAgent):
         # Initialize database if needed
         self._init_database()
         
-        self.logger.info("StorageAgent initialized successfully")
+        self._log("info", "StorageAgent initialized successfully")
     
     def _init_database(self) -> None:
         """
@@ -151,159 +161,97 @@ class StorageAgent(BaseAgent):
                 dataset_id=bigquery_config.dataset_id,
                 location=bigquery_config.location
             )
-            self.logger.info(f"Dataset initialization result: {result['message']}")
+            self._log("info", f"Dataset initialization result: {result['message']}")
             
             # Create tables if they don't exist
             tables_result = bigquery.create_financial_tables(
                 project_id=bigquery_config.project_id,
                 dataset_id=bigquery_config.dataset_id
             )
-            self.logger.info(f"Tables created: {', '.join(tables_result['tables'].keys())}")
+            self._log("info", f"Tables created: {', '.join(tables_result['tables'].keys())}")
             
         except Exception as e:
-            self.logger.error(f"Error initializing database: {str(e)}")
+            self._log("error", f"Error initializing database: {str(e)}")
             # Don't raise the exception, let the agent continue to function
             # even if db initialization fails - it might work with existing tables
     
     def _register_tools(self) -> None:
         """Register storage tools for the agent to use."""
         
+        # Create a tool using FinflowTool from utils.agent_tools
+        from utils.agent_tools import FinflowTool
+        
+        # Access add_tool through __dict__ to bypass Pydantic validation
+        if "add_tool" in self.__dict__:
+            add_tool_method = self.__dict__["add_tool"]
+        else:
+            # If add_tool is not found in __dict__, log warning and return early
+            if "logger" in self.__dict__ and self.__dict__["logger"]:
+                self._log("warning", "add_tool method not found in __dict__, skipping tool registration")
+            else:
+                print("[WARNING] add_tool method not found in __dict__, skipping tool registration")
+            return
+        
         # Document batch storage tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="store_documents_batch_tool",
             description="Store multiple documents in BigQuery",
-            parameters={
-                "documents": {
-                    "type": "array",
-                    "description": "List of documents to store"
-                }
-            },
             function=self._tool_store_documents_batch
         ))
         
         # Document retrieval tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="retrieve_document_tool",
             description="Retrieve a document from BigQuery",
-            parameters={
-                "document_id": {
-                    "type": "string",
-                    "description": "ID of the document to retrieve"
-                },
-                "include_content": {
-                    "type": "boolean",
-                    "description": "Whether to include the full content",
-                    "default": True
-                }
-            },
             function=self._tool_retrieve_document
         ))
         
         # Document query tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="query_documents_tool",
             description="Query documents from BigQuery",
-            parameters={
-                "query_params": {
-                    "type": "object",
-                    "description": "Query parameters for filtering documents"
-                }
-            },
             function=self._tool_query_documents
         ))
         
         # Entity storage tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="store_entity_tool",
             description="Store an entity in BigQuery",
-            parameters={
-                "entity": {
-                    "type": "object",
-                    "description": "The entity to store"
-                }
-            },
             function=self._tool_store_entity
         ))
         
         # Entity retrieval tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="retrieve_entity_tool",
             description="Retrieve an entity from BigQuery",
-            parameters={
-                "entity_id": {
-                    "type": "string",
-                    "description": "ID of the entity to retrieve"
-                }
-            },
             function=self._tool_retrieve_entity
         ))
         
         # Document relationship tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="create_document_relationship_tool",
             description="Create a relationship between documents",
-            parameters={
-                "source_document_id": {
-                    "type": "string",
-                    "description": "ID of the source document"
-                },
-                "target_document_id": {
-                    "type": "string",
-                    "description": "ID of the target document"
-                },
-                "relationship_type": {
-                    "type": "string",
-                    "description": "Type of relationship"
-                },
-                "metadata": {
-                    "type": "object",
-                    "description": "Additional metadata for the relationship",
-                    "default": {}
-                }
-            },
             function=self._tool_create_document_relationship
         ))
         
         # Financial analysis tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="run_financial_analysis_tool",
             description="Run financial analysis on stored data",
-            parameters={
-                "analysis_type": {
-                    "type": "string",
-                    "description": "Type of analysis to run (aging_report, spending_by_vendor, monthly_expenses, category_distribution)"
-                },
-                "parameters": {
-                    "type": "object",
-                    "description": "Parameters for the analysis"
-                }
-            },
             function=self._tool_run_financial_analysis
         ))
         
         # Custom query tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="run_custom_query_tool",
             description="Run a custom SQL query against the BigQuery database",
-            parameters={
-                "query": {
-                    "type": "string",
-                    "description": "SQL query to execute"
-                }
-            },
             function=self._tool_run_custom_query
         ))
         
         # Invalidate cache tool
-        self.add_tool(BaseTool(
+        add_tool_method(FinflowTool(
             name="invalidate_cache_tool",
             description="Invalidate the cache for a specific query",
-            parameters={
-                "cache_key": {
-                    "type": "string",
-                    "description": "Cache key to invalidate"
-                }
-            },
             function=self._tool_invalidate_cache
         ))
     
@@ -362,7 +310,7 @@ class StorageAgent(BaseAgent):
             )
             
             # Log the operation
-            self.logger.info(f"Document stored with ID: {transformed_doc['id']}, status: {result['status']}")
+            self._log("info", f"Document stored with ID: {transformed_doc['id']}, status: {result['status']}")
             
             # Return result
             return {
@@ -374,7 +322,7 @@ class StorageAgent(BaseAgent):
             }
         
         except Exception as e:
-            self.logger.error(f"Error storing document: {str(e)}")
+            self._log("error", f"Error storing document: {str(e)}")
             return {
                 "document_id": document.get("document_id", document.get("id", "unknown")),
                 "status": "error",
@@ -429,7 +377,7 @@ class StorageAgent(BaseAgent):
             }
         
         except Exception as e:
-            self.logger.error(f"Error storing documents batch: {str(e)}")
+            self._log("error", f"Error storing documents batch: {str(e)}")
             return {
                 "status": "error",
                 "count": 0,
@@ -508,7 +456,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error retrieving document {document_id}: {str(e)}")
+            self._log("error", f"Error retrieving document {document_id}: {str(e)}")
             return {
                 "status": "error",
                 "document_id": document_id,
@@ -643,7 +591,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error querying documents: {str(e)}")
+            self._log("error", f"Error querying documents: {str(e)}")
             return {
                 "status": "error",
                 "message": str(e),
@@ -693,7 +641,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error storing entity: {str(e)}")
+            self._log("error", f"Error storing entity: {str(e)}")
             return {
                 "entity_id": entity.get("entity_id", entity.get("id", "unknown")),
                 "status": "error",
@@ -759,7 +707,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error retrieving entity {entity_id}: {str(e)}")
+            self._log("error", f"Error retrieving entity {entity_id}: {str(e)}")
             return {
                 "status": "error",
                 "entity_id": entity_id,
@@ -816,7 +764,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error creating document relationship: {str(e)}")
+            self._log("error", f"Error creating document relationship: {str(e)}")
             return {
                 "status": "error",
                 "timestamp": datetime.utcnow().isoformat(),
@@ -857,7 +805,7 @@ class StorageAgent(BaseAgent):
             return result
             
         except Exception as e:
-            self.logger.error(f"Error running financial analysis: {str(e)}")
+            self._log("error", f"Error running financial analysis: {str(e)}")
             return {
                 "status": "error",
                 "message": str(e),
@@ -890,7 +838,7 @@ class StorageAgent(BaseAgent):
             return result
             
         except Exception as e:
-            self.logger.error(f"Error running custom query: {str(e)}")
+            self._log("error", f"Error running custom query: {str(e)}")
             return {
                 "status": "error",
                 "message": str(e),
@@ -922,7 +870,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error invalidating cache: {str(e)}")
+            self._log("error", f"Error invalidating cache: {str(e)}")
             return {
                 "status": "error",
                 "message": str(e),
@@ -1225,7 +1173,7 @@ class StorageAgent(BaseAgent):
             return False
             
         except Exception as e:
-            self.logger.error(f"Error checking if document exists: {str(e)}")
+            self._log("error", f"Error checking if document exists: {str(e)}")
             return False
     
     #### Public API methods - for direct use by other agents ####
@@ -1240,11 +1188,11 @@ class StorageAgent(BaseAgent):
         Returns:
             Result of the storage operation.
         """
-        self.logger.info(f"Storing document: {document.get('document_id', document.get('id', 'unknown'))}")
+        self._log("info", f"Storing document: {document.get('document_id', document.get('id', 'unknown'))}")
         
         result = self._tool_store_document(document)
         
-        self.logger.info(f"Document stored: {result['document_id']}, status: {result['status']}")
+        self._log("info", f"Document stored: {result['document_id']}, status: {result['status']}")
         
         return cast(StorageResult, {
             "document_id": result["document_id"],
@@ -1263,12 +1211,12 @@ class StorageAgent(BaseAgent):
         Returns:
             The retrieved document, or None if not found.
         """
-        self.logger.info(f"Retrieving document: {document_id}")
+        self._log("info", f"Retrieving document: {document_id}")
         
         result = self._tool_retrieve_document(document_id)
         
         if result["status"] != "success":
-            self.logger.warning(f"Document not found: {document_id}")
+            self._log("warning", f"Document not found: {document_id}")
             return None
         
         doc_data = result["document"]
@@ -1279,7 +1227,7 @@ class StorageAgent(BaseAgent):
             "content": doc_data
         }
         
-        self.logger.info(f"Document retrieved: {document_id}")
+        self._log("info", f"Document retrieved: {document_id}")
         return document
     
     async def query_documents(self, query: StorageQuery) -> QueryResult:
@@ -1292,7 +1240,7 @@ class StorageAgent(BaseAgent):
         Returns:
             Query results.
         """
-        self.logger.info(f"Querying documents with filters: {query.get('filters', {})}")
+        self._log("info", f"Querying documents with filters: {query.get('filters', {})}")
         
         result = self._tool_query_documents(query)
         
@@ -1303,7 +1251,7 @@ class StorageAgent(BaseAgent):
             "execution_time_ms": 0  # Not tracking execution time in this version
         }
         
-        self.logger.info(f"Query returned {query_result['count']} documents")
+        self._log("info", f"Query returned {query_result['count']} documents")
         return query_result
     
     @lru_cache(maxsize=100)
@@ -1404,7 +1352,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error creating document version: {str(e)}")
+            self._log("error", f"Error creating document version: {str(e)}")
             return {
                 "status": "error",
                 "message": f"Error creating document version: {str(e)}"
@@ -1443,7 +1391,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error retrieving document versions: {str(e)}")
+            self._log("error", f"Error retrieving document versions: {str(e)}")
             return {
                 "status": "error",
                 "message": f"Error retrieving document versions: {str(e)}",
@@ -1493,7 +1441,7 @@ class StorageAgent(BaseAgent):
                 }
             
         except Exception as e:
-            self.logger.error(f"Error retrieving document version: {str(e)}")
+            self._log("error", f"Error retrieving document version: {str(e)}")
             return {
                 "status": "error",
                 "message": f"Error retrieving document version: {str(e)}"
@@ -1549,7 +1497,7 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error logging audit event: {str(e)}")
+            self._log("error", f"Error logging audit event: {str(e)}")
             return {
                 "status": "error",
                 "message": f"Error logging audit event: {str(e)}"
@@ -1638,9 +1586,28 @@ class StorageAgent(BaseAgent):
             }
             
         except Exception as e:
-            self.logger.error(f"Error retrieving audit trail: {str(e)}")
+            self._log("error", f"Error retrieving audit trail: {str(e)}")
             return {
                 "status": "error",
                 "message": f"Error retrieving audit trail: {str(e)}",
                 "events": []
             }
+    
+    def _log(self, level: str, message: str):
+        """
+        Safe logging helper that checks if logger exists before using it.
+        
+        Args:
+            level: The log level ('debug', 'info', 'warning', 'error', 'critical')
+            message: The message to log
+        """
+        if hasattr(self, 'logger') and self.logger:
+            log_method = getattr(self.logger, level.lower(), None)
+            if log_method:
+                log_method(message)
+            else:
+                # Fallback to print if log level not found
+                print(f"[{level.upper()}] {message}")
+        else:
+            # Fallback to print if logger is not available
+            print(f"[{level.upper()}] {message}")
