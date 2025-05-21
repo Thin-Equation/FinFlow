@@ -31,12 +31,17 @@ sdist/
 var/
 wheels/
 *.egg
+.installed.cfg
+MANIFEST
 
 # Local configuration
 .env
 *.local.yaml
 *.local.yml
 config_local.py
+local_settings.py
+instance/
+.instance/
 
 # IDE specific files
 .idea/
@@ -50,6 +55,9 @@ config_local.py
 .settings/
 .spyderproject
 .spyproject
+.ropeproject/
+.history/
+.hypothesis/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -85,3 +93,17 @@ _build/
 # Unit test / coverage reports
 .tox/
 nosetests.xml
+.nox/
+
+# Project specific
+workflow_test_output/
+sample_data/invoices/*.pdf
+sample_data/invoices/*.jpg
+sample_data/invoices/*.png
+sample_data/invoices/*.tiff
+# Keep sample data structure but not potentially sensitive content
+!sample_data/invoices/.gitkeep
+
+# Secrets
+secrets/
+.secrets/
