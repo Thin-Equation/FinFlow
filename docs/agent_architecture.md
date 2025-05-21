@@ -14,17 +14,17 @@
              v                     v                    v
 +-------------------------+ +----------------+ +-------------------+
 |                         | |                | |                   |
-| Document Processor Agent| | Validation Agent| | Storage Agent     |
+| Document Processor Agent| |Validation Agent| |  Storage Agent    |
 |                         | |                | |                   |
 +-------------------------+ +----------------+ +-------------------+
-             |                     |                    |
-             |                     |                    |
-             v                     v                    v
-+-------------------------+ +----------------+ +-------------------+
-|                         | |                | |                   |
-| Rule Retrieval Agent    | | Analytics Agent| |                   |
-|                         | |                | |                   |
-+-------------------------+ +----------------+ +-------------------+
+                                   |                    
+                                   |                    
+                                   v                    
+                            +----------------+ 
+                            |                | 
+                            | Analytics Agent| 
+                            |                | 
+                            +----------------+ 
 ```
 
 ## Agent Responsibilities
@@ -41,12 +41,6 @@
 - Classifies document types (invoices, receipts, etc.)
 - Normalizes extracted data to standard formats
 - Performs initial data validation
-
-### Rule Retrieval Agent
-- Retrieves applicable compliance rules based on document type
-- Filters rules based on jurisdiction and other attributes
-- Provides rule details to the validation agent
-- Updates rule repository with new rules
 
 ### Validation Agent
 - Validates documents against compliance rules
@@ -79,7 +73,6 @@ Agents communicate primarily through:
 ## Data Flow
 
 1. Document ingestion via Document Processor
-2. Rule retrieval for the specific document type
-3. Validation against retrieved rules
-4. Storage of validated document data
-5. Analytics on stored documents
+2. Validation against the rules
+3. Storage of validated document data
+4. Analytics on stored documents

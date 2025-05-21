@@ -1,0 +1,77 @@
+WORKFLOW EXECUTION REPORT
+======================
+
+Workflow: Financial Reporting (c81568ab-ff7e-46cc-a715-6f9510ae2f61)
+Description: Generate monthly financial reports
+Type: financial_reporting
+
+EXECUTION SUMMARY
+-----------------
+Status: failed
+Execution Time: N/A
+Error: name 'logger' is not defined
+
+TASK SUMMARY
+------------
+Total Tasks: 17
+Completed: 3
+Failed: 0
+Skipped: 0
+Pending: 14
+
+TASK DETAILS
+------------
+Task: Extract General Ledger Data (extract_gl_data)
+  Status: completed
+  Duration: 0.61s
+
+Task: Extract Accounts Payable Data (extract_ap_data)
+  Status: completed
+  Duration: 0.41s
+
+Task: Extract Accounts Receivable Data (extract_ar_data)
+  Status: completed
+  Duration: 0.51s
+
+Task: Transform Financial Data (transform_data)
+  Status: pending
+
+Task: Generate Income Statement (generate_income_statement)
+  Status: pending
+
+Task: Generate Balance Sheet (generate_balance_sheet)
+  Status: pending
+
+Task: Generate Cash Flow Statement (generate_cash_flow)
+  Status: pending
+
+Task: Consolidate Reports (consolidate_reports)
+  Status: pending
+
+Task: Generate Final Report (generate_final_report)
+  Status: pending
+
+Task: Archive Report (archive_report)
+  Status: pending
+
+Task: Switch Router: report_distribution (report_distribution_router)
+  Status: pending
+
+Task: Branch Router: email_distribution (email_distribution_router)
+  Status: pending
+
+Task: Email Report (email_report)
+  Status: pending
+
+Task: Branch Router: portal_distribution (portal_distribution_router)
+  Status: pending
+
+Task: Upload to Portal (upload_to_portal)
+  Status: pending
+
+Task: Branch Router: default_distribution (default_distribution_router)
+  Status: pending
+
+Task: Store Report Locally (store_locally)
+  Status: pending
+

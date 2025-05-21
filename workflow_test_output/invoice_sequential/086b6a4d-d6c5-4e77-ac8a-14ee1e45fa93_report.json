@@ -1,0 +1,265 @@
+{
+  "workflow": {
+    "id": "086b6a4d-d6c5-4e77-ac8a-14ee1e45fa93",
+    "name": "Invoice Processing",
+    "description": "Process invoices from receipt to payment",
+    "process_type": "invoice_processing",
+    "tasks_count": 15
+  },
+  "execution": {
+    "status": "completed",
+    "successful": true,
+    "execution_time": 4.349949,
+    "error": null
+  },
+  "task_summary": {
+    "completed": 15,
+    "failed": 0,
+    "skipped": 0,
+    "pending": 0,
+    "total": 15
+  },
+  "tasks": [
+    {
+      "id": "extract_invoice_data",
+      "name": "Extract Invoice Data",
+      "status": "completed",
+      "duration": "0.50s",
+      "started": "2025-05-21T10:29:44.689149",
+      "completed": "2025-05-21T10:29:45.193867",
+      "error": null,
+      "result": {
+        "invoice_number": "INV-2025-1234",
+        "vendor": "Acme Corp",
+        "date": "2025-05-15",
+        "due_date": "2025-06-15",
+        "amount": 5750.0,
+        "currency": "USD",
+        "line_items": [
+          {
+            "description": "Software License",
+            "quantity": 5,
+            "unit_price": 1000.0,
+            "total": 5000.0
+          },
+          {
+            "description": "Support",
+            "quantity": 5,
+            "unit_price": 150.0,
+            "total": 750.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "validate_invoice",
+      "name": "Validate Invoice",
+      "status": "completed",
+      "duration": "0.31s",
+      "started": "2025-05-21T10:29:45.194058",
+      "completed": "2025-05-21T10:29:45.499227",
+      "error": null,
+      "result": {
+        "valid": true,
+        "errors": [],
+        "warnings": []
+      }
+    },
+    {
+      "id": "calculate_metrics",
+      "name": "Calculate Invoice Metrics",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:45.499442",
+      "completed": "2025-05-21T10:29:45.499582",
+      "error": null,
+      "result": {
+        "amount": 5750.0,
+        "tax_amount": 575.0,
+        "total_with_tax": 6325.0,
+        "currency": "USD",
+        "fiscal_year": 2025,
+        "fiscal_quarter": 2
+      }
+    },
+    {
+      "id": "process_payment",
+      "name": "Process Payment",
+      "status": "completed",
+      "duration": "0.81s",
+      "started": "2025-05-21T10:29:47.321155",
+      "completed": "2025-05-21T10:29:48.126392",
+      "error": null,
+      "result": {
+        "payment_id": "PAY-1747837788",
+        "payment_date": "2025-05-21T10:29:48.126325",
+        "payment_method": "ACH",
+        "status": "completed"
+      }
+    },
+    {
+      "id": "record_transaction",
+      "name": "Record Transaction",
+      "status": "completed",
+      "duration": "0.41s",
+      "started": "2025-05-21T10:29:48.126755",
+      "completed": "2025-05-21T10:29:48.532777",
+      "error": null,
+      "result": {
+        "transaction_id": "TXN-1747837788",
+        "gl_entry_date": "2025-05-21T10:29:48.532312",
+        "accounts": [
+          {
+            "account": "Accounts Payable",
+            "debit": 5750.0,
+            "credit": 0
+          },
+          {
+            "account": "Cash",
+            "debit": 0,
+            "credit": 5750.0
+          }
+        ],
+        "status": "posted"
+      }
+    },
+    {
+      "id": "send_notifications",
+      "name": "Send Notifications",
+      "status": "completed",
+      "duration": "0.20s",
+      "started": "2025-05-21T10:29:48.533117",
+      "completed": "2025-05-21T10:29:48.733495",
+      "error": null,
+      "result": {
+        "notifications_sent": [
+          {
+            "recipient": "accounts@example.com",
+            "type": "payment_confirmation"
+          },
+          {
+            "recipient": "vendor@acmecorp.com",
+            "type": "payment_notification"
+          }
+        ]
+      }
+    },
+    {
+      "id": "archive_documents",
+      "name": "Archive Documents",
+      "status": "completed",
+      "duration": "0.31s",
+      "started": "2025-05-21T10:29:48.733728",
+      "completed": "2025-05-21T10:29:49.038879",
+      "error": null,
+      "result": {
+        "archive_id": "ARC-1747837789",
+        "storage_path": "/archives/invoices/2025/05",
+        "archive_date": "2025-05-21T10:29:49.038847"
+      }
+    },
+    {
+      "id": "approval_routing_router",
+      "name": "Switch Router: approval_routing",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:45.499624",
+      "completed": "2025-05-21T10:29:45.499666",
+      "error": null,
+      "result": {
+        "status": "initialized"
+      }
+    },
+    {
+      "id": "high_value_approval_router",
+      "name": "Branch Router: high_value_approval",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:45.499884",
+      "completed": "2025-05-21T10:29:45.499916",
+      "error": null,
+      "result": false
+    },
+    {
+      "id": "manager_approval",
+      "name": "Manager Approval",
+      "status": "completed",
+      "duration": "0.50s",
+      "started": "2025-05-21T10:29:46.110790",
+      "completed": "2025-05-21T10:29:46.615453",
+      "error": null,
+      "result": {
+        "approved": true,
+        "approver": "Jane Manager",
+        "approval_date": "2025-05-21T10:29:46.615419",
+        "comments": "Approved after budget verification"
+      }
+    },
+    {
+      "id": "director_approval",
+      "name": "Director Approval",
+      "status": "completed",
+      "duration": "0.71s",
+      "started": "2025-05-21T10:29:46.615658",
+      "completed": "2025-05-21T10:29:47.320889",
+      "error": null,
+      "result": {
+        "approved": true,
+        "approver": "John Director",
+        "approval_date": "2025-05-21T10:29:47.320838",
+        "comments": "Approved - within budget allocation"
+      }
+    },
+    {
+      "id": "medium_value_approval_router",
+      "name": "Branch Router: medium_value_approval",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:45.499703",
+      "completed": "2025-05-21T10:29:45.499777",
+      "error": null,
+      "result": true
+    },
+    {
+      "id": "manager_approval_medium",
+      "name": "Manager Approval",
+      "status": "completed",
+      "duration": "0.51s",
+      "started": "2025-05-21T10:29:45.499948",
+      "completed": "2025-05-21T10:29:46.005100",
+      "error": null,
+      "result": {
+        "approved": true,
+        "approver": "Jane Manager",
+        "approval_date": "2025-05-21T10:29:46.005060",
+        "comments": "Approved after budget verification"
+      }
+    },
+    {
+      "id": "low_value_approval_router",
+      "name": "Branch Router: low_value_approval",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:45.499815",
+      "completed": "2025-05-21T10:29:45.499852",
+      "error": null,
+      "result": false
+    },
+    {
+      "id": "automatic_approval",
+      "name": "Automatic Approval",
+      "status": "completed",
+      "duration": "0.11s",
+      "started": "2025-05-21T10:29:46.005307",
+      "completed": "2025-05-21T10:29:46.110584",
+      "error": null,
+      "result": {
+        "approved": true,
+        "approver": "System",
+        "approval_date": "2025-05-21T10:29:46.110545",
+        "comments": "Automatically approved (low value)"
+      }
+    }
+  ],
+  "generated_at": "2025-05-21T10:29:49.041102"
+}

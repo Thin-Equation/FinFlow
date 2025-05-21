@@ -1,0 +1,250 @@
+{
+  "workflow": {
+    "id": "8bac2406-1732-456b-bd5e-dda6858c30f9",
+    "name": "Financial Reporting",
+    "description": "Generate monthly financial reports",
+    "process_type": "financial_reporting",
+    "tasks_count": 17
+  },
+  "execution": {
+    "status": "completed",
+    "successful": true,
+    "execution_time": 6.65389,
+    "error": null
+  },
+  "task_summary": {
+    "completed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "pending": 0,
+    "total": 17
+  },
+  "tasks": [
+    {
+      "id": "extract_gl_data",
+      "name": "Extract General Ledger Data",
+      "status": "completed",
+      "duration": "0.61s",
+      "started": "2025-05-21T10:29:49.551309",
+      "completed": "2025-05-21T10:29:50.156464",
+      "error": null,
+      "result": {
+        "gl_data": "GL data extracted successfully",
+        "status": "success"
+      }
+    },
+    {
+      "id": "extract_ap_data",
+      "name": "Extract Accounts Payable Data",
+      "status": "completed",
+      "duration": "0.40s",
+      "started": "2025-05-21T10:29:50.156681",
+      "completed": "2025-05-21T10:29:50.557297",
+      "error": null,
+      "result": {
+        "ap_data": "AP data extracted successfully",
+        "status": "success"
+      }
+    },
+    {
+      "id": "extract_ar_data",
+      "name": "Extract Accounts Receivable Data",
+      "status": "completed",
+      "duration": "0.51s",
+      "started": "2025-05-21T10:29:50.557618",
+      "completed": "2025-05-21T10:29:51.062759",
+      "error": null,
+      "result": {
+        "ar_data": "AR data extracted successfully",
+        "status": "success"
+      }
+    },
+    {
+      "id": "transform_data",
+      "name": "Transform Financial Data",
+      "status": "completed",
+      "duration": "0.70s",
+      "started": "2025-05-21T10:29:51.063012",
+      "completed": "2025-05-21T10:29:51.766979",
+      "error": null,
+      "result": {
+        "transformed_data": true,
+        "time_period": "May 2025",
+        "status": "success"
+      }
+    },
+    {
+      "id": "generate_income_statement",
+      "name": "Generate Income Statement",
+      "status": "completed",
+      "duration": "0.80s",
+      "started": "2025-05-21T10:29:52.368502",
+      "completed": "2025-05-21T10:29:53.168922",
+      "error": null,
+      "result": {
+        "section": "income_statement",
+        "status": "generated"
+      }
+    },
+    {
+      "id": "generate_balance_sheet",
+      "name": "Generate Balance Sheet",
+      "status": "completed",
+      "duration": "0.60s",
+      "started": "2025-05-21T10:29:51.767240",
+      "completed": "2025-05-21T10:29:52.368135",
+      "error": null,
+      "result": {
+        "section": "balance_sheet",
+        "status": "generated"
+      }
+    },
+    {
+      "id": "generate_cash_flow",
+      "name": "Generate Cash Flow Statement",
+      "status": "completed",
+      "duration": "0.71s",
+      "started": "2025-05-21T10:29:53.169183",
+      "completed": "2025-05-21T10:29:53.874421",
+      "error": null,
+      "result": {
+        "section": "cash_flow",
+        "status": "generated"
+      }
+    },
+    {
+      "id": "consolidate_reports",
+      "name": "Consolidate Reports",
+      "status": "completed",
+      "duration": "0.51s",
+      "started": "2025-05-21T10:29:53.874991",
+      "completed": "2025-05-21T10:29:54.380518",
+      "error": null,
+      "result": {
+        "consolidated": true,
+        "sections": [
+          "income_statement",
+          "balance_sheet",
+          "cash_flow"
+        ],
+        "status": "success"
+      }
+    },
+    {
+      "id": "generate_final_report",
+      "name": "Generate Final Report",
+      "status": "completed",
+      "duration": "0.61s",
+      "started": "2025-05-21T10:29:54.380846",
+      "completed": "2025-05-21T10:29:54.986198",
+      "error": null,
+      "result": {
+        "report_id": "FR-1747837794",
+        "filename": "Financial_Report_May_2025.pdf",
+        "size_kb": 2048,
+        "status": "generated"
+      }
+    },
+    {
+      "id": "archive_report",
+      "name": "Archive Report",
+      "status": "completed",
+      "duration": "0.31s",
+      "started": "2025-05-21T10:29:55.898764",
+      "completed": "2025-05-21T10:29:56.204220",
+      "error": null,
+      "result": {
+        "archive_id": "REP-ARC-1747837796",
+        "storage_path": "/archives/reports/2025/05",
+        "retention_period": "7 years"
+      }
+    },
+    {
+      "id": "report_distribution_router",
+      "name": "Switch Router: report_distribution",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:54.986602",
+      "completed": "2025-05-21T10:29:54.986666",
+      "error": null,
+      "result": {
+        "status": "initialized"
+      }
+    },
+    {
+      "id": "email_distribution_router",
+      "name": "Branch Router: email_distribution",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:54.986707",
+      "completed": "2025-05-21T10:29:54.986748",
+      "error": null,
+      "result": true
+    },
+    {
+      "id": "email_report",
+      "name": "Email Report",
+      "status": "completed",
+      "duration": "0.31s",
+      "started": "2025-05-21T10:29:55.593418",
+      "completed": "2025-05-21T10:29:55.898580",
+      "error": null,
+      "result": {
+        "email_sent": true,
+        "recipients": [
+          "finance@example.com",
+          "cfo@example.com"
+        ],
+        "sent_at": "2025-05-21T10:29:55.898541"
+      }
+    },
+    {
+      "id": "portal_distribution_router",
+      "name": "Branch Router: portal_distribution",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:54.987136",
+      "completed": "2025-05-21T10:29:54.987194",
+      "error": null,
+      "result": false
+    },
+    {
+      "id": "upload_to_portal",
+      "name": "Upload to Portal",
+      "status": "completed",
+      "duration": "0.40s",
+      "started": "2025-05-21T10:29:55.192748",
+      "completed": "2025-05-21T10:29:55.593237",
+      "error": null,
+      "result": {
+        "upload_success": true,
+        "portal_url": "https://finance-portal.example.com/reports/may2025",
+        "uploaded_at": "2025-05-21T10:29:55.593206"
+      }
+    },
+    {
+      "id": "default_distribution_router",
+      "name": "Branch Router: default_distribution",
+      "status": "completed",
+      "duration": "0.00s",
+      "started": "2025-05-21T10:29:54.986849",
+      "completed": "2025-05-21T10:29:54.987072",
+      "error": null,
+      "result": false
+    },
+    {
+      "id": "store_locally",
+      "name": "Store Report Locally",
+      "status": "completed",
+      "duration": "0.21s",
+      "started": "2025-05-21T10:29:54.987280",
+      "completed": "2025-05-21T10:29:55.192429",
+      "error": null,
+      "result": {
+        "stored": true,
+        "path": "/reports/2025/05/Financial_Report_May_2025.pdf"
+      }
+    }
+  ],
+  "generated_at": "2025-05-21T10:29:56.208416"
+}

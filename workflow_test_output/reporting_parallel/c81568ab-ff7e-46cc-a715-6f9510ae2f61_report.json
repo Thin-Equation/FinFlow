@@ -1,0 +1,178 @@
+{
+  "workflow": {
+    "id": "c81568ab-ff7e-46cc-a715-6f9510ae2f61",
+    "name": "Financial Reporting",
+    "description": "Generate monthly financial reports",
+    "process_type": "financial_reporting",
+    "tasks_count": 17
+  },
+  "execution": {
+    "status": "failed",
+    "successful": false,
+    "execution_time": null,
+    "error": "name 'logger' is not defined"
+  },
+  "task_summary": {
+    "completed": 3,
+    "failed": 0,
+    "skipped": 0,
+    "pending": 14,
+    "total": 17
+  },
+  "tasks": [
+    {
+      "id": "extract_gl_data",
+      "name": "Extract General Ledger Data",
+      "status": "completed",
+      "duration": "0.61s",
+      "started": "2025-05-21T10:29:56.209948",
+      "completed": "2025-05-21T10:29:56.815437",
+      "error": null
+    },
+    {
+      "id": "extract_ap_data",
+      "name": "Extract Accounts Payable Data",
+      "status": "completed",
+      "duration": "0.41s",
+      "started": "2025-05-21T10:29:56.210286",
+      "completed": "2025-05-21T10:29:56.615659",
+      "error": null
+    },
+    {
+      "id": "extract_ar_data",
+      "name": "Extract Accounts Receivable Data",
+      "status": "completed",
+      "duration": "0.51s",
+      "started": "2025-05-21T10:29:56.210577",
+      "completed": "2025-05-21T10:29:56.715949",
+      "error": null
+    },
+    {
+      "id": "transform_data",
+      "name": "Transform Financial Data",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "generate_income_statement",
+      "name": "Generate Income Statement",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "generate_balance_sheet",
+      "name": "Generate Balance Sheet",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "generate_cash_flow",
+      "name": "Generate Cash Flow Statement",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "consolidate_reports",
+      "name": "Consolidate Reports",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "generate_final_report",
+      "name": "Generate Final Report",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "archive_report",
+      "name": "Archive Report",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "report_distribution_router",
+      "name": "Switch Router: report_distribution",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "email_distribution_router",
+      "name": "Branch Router: email_distribution",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "email_report",
+      "name": "Email Report",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "portal_distribution_router",
+      "name": "Branch Router: portal_distribution",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "upload_to_portal",
+      "name": "Upload to Portal",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "default_distribution_router",
+      "name": "Branch Router: default_distribution",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    },
+    {
+      "id": "store_locally",
+      "name": "Store Report Locally",
+      "status": "pending",
+      "duration": null,
+      "started": null,
+      "completed": null,
+      "error": null
+    }
+  ],
+  "generated_at": "2025-05-21T10:29:56.817728"
+}

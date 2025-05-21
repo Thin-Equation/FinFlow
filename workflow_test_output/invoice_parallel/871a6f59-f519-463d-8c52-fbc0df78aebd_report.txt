@@ -1,0 +1,69 @@
+WORKFLOW EXECUTION REPORT
+======================
+
+Workflow: Invoice Processing (871a6f59-f519-463d-8c52-fbc0df78aebd)
+Description: Process invoices from receipt to payment
+Type: invoice_processing
+
+EXECUTION SUMMARY
+-----------------
+Status: failed
+Execution Time: N/A
+Error: name 'logger' is not defined
+
+TASK SUMMARY
+------------
+Total Tasks: 15
+Completed: 1
+Failed: 0
+Skipped: 0
+Pending: 14
+
+TASK DETAILS
+------------
+Task: Extract Invoice Data (extract_invoice_data)
+  Status: completed
+  Duration: 0.50s
+
+Task: Validate Invoice (validate_invoice)
+  Status: pending
+
+Task: Calculate Invoice Metrics (calculate_metrics)
+  Status: pending
+
+Task: Process Payment (process_payment)
+  Status: pending
+
+Task: Record Transaction (record_transaction)
+  Status: pending
+
+Task: Send Notifications (send_notifications)
+  Status: pending
+
+Task: Archive Documents (archive_documents)
+  Status: pending
+
+Task: Switch Router: approval_routing (approval_routing_router)
+  Status: pending
+
+Task: Branch Router: high_value_approval (high_value_approval_router)
+  Status: pending
+
+Task: Manager Approval (manager_approval)
+  Status: pending
+
+Task: Director Approval (director_approval)
+  Status: pending
+
+Task: Branch Router: medium_value_approval (medium_value_approval_router)
+  Status: pending
+
+Task: Manager Approval (manager_approval_medium)
+  Status: pending
+
+Task: Branch Router: low_value_approval (low_value_approval_router)
+  Status: pending
+
+Task: Automatic Approval (automatic_approval)
+  Status: pending
+
