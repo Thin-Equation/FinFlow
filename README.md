@@ -7,6 +7,8 @@ FinFlow is an intelligent system that analyzes, processes, and extracts insights
 
 ## Features
 - Multi-agent architecture for specialized document processing tasks
+- Advanced agent communication framework with state management
+- Intelligent task delegation across specialized agents
 - Document parsing and entity extraction using Document AI
 - Validation against business rules and compliance requirements
 - Structured data storage in BigQuery
@@ -18,12 +20,23 @@ The system consists of several specialized agents:
 
 1. **Master Orchestrator** - Coordinates the overall workflow
 2. **Document Processor** - Extracts information from documents
-3. **Rule Retrieval** - Retrieves compliance rules
-4. **Validation** - Validates documents against rules
-5. **Storage** - Manages data persistence in BigQuery and other storage systems
-6. **Analytics** - Generates financial insights
+3. **Validation** - Validates documents against rules
+4. **Storage** - Manages data persistence in BigQuery and other storage systems
+5. **Analytics** - Generates financial insights
 
 For more details, see [Agent Architecture](docs/agent_architecture.md).
+
+## Agent Communication Framework
+
+The FinFlow system features a robust Agent Communication Framework that provides:
+
+- **Full Communication Protocol** - Standardized message passing with delivery guarantees
+- **Task Execution Framework** - Task creation, tracking, and hierarchical execution
+- **State-based Communication** - Workflow state management with tracking and history
+- **LLM-driven Delegation** - Intelligent task delegation based on agent capabilities
+- **Advanced Delegation Strategies** - Multiple strategies for optimal agent selection
+
+For more details, see [Agent Communication Framework](docs/agent_communication_framework.md).
 
 ### Storage Agent
 The StorageAgent is responsible for all database operations in the FinFlow system. It provides:
