@@ -2,17 +2,15 @@
 BigQuery integration tools for the FinFlow system.
 """
 
-import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional
 
 from google.adk.tools import ToolContext  # type: ignore
 from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from google.cloud.bigquery import SchemaField, Table, Dataset, QueryJobConfig
-from google.cloud.exceptions import Conflict
 
 # Type definitions for clarity
 SchemaType = List[SchemaField]

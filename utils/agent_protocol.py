@@ -5,11 +5,11 @@ This module contains the protocol definitions, message schemas, and protocol-spe
 utilities for agent-to-agent communication.
 """
 
-from typing import Any, Dict, List, Optional, Union, TypedDict, Literal
+from typing import Any, Dict, Optional, Union, TypedDict
 from datetime import datetime
 import json
 import uuid
-from enum import Enum, auto
+from enum import Enum
 
 # Message types enum
 class MessageType(str, Enum):

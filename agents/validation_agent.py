@@ -814,7 +814,6 @@ class ValidationAgent(BaseAgent):
         """Register validation tools."""
         # Create and add tools using direct access to the LlmAgent.add_tool method
         from google.adk.tools import BaseTool
-        from google.adk.agents import LlmAgent
         
         # Define a wrapper class for the validation tools
         class ValidationTool(BaseTool):

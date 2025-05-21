@@ -146,7 +146,7 @@ class DocumentProcessor:
     
     def _report_metrics(self) -> None:
         """Report collected metrics."""
-        logger.info(f"==== Document Processor Metrics ====")
+        logger.info("==== Document Processor Metrics ====")
         logger.info(f"Total documents processed: {self.process_metrics['total_documents']}")
         logger.info(f"Successful: {self.process_metrics['successful']} - " +
                    f"Failed: {self.process_metrics['failed']}")
@@ -621,7 +621,7 @@ class DocumentProcessor:
                         continue
                     else:
                         raise
-                except Exception as e:
+                except Exception:
                     # Non-retriable error
                     raise
                 

@@ -98,7 +98,7 @@ def run_and_visualize_workflow(
     monitor.export_execution_report(workflow, result, text_report_path, "text")
     monitor.export_execution_report(workflow, result, json_report_path, "json")
     
-    logger.info(f"Workflow execution visualized:")
+    logger.info("Workflow execution visualized:")
     logger.info(f"  Graph: {graph_path}")
     logger.info(f"  HTML Report: {report_path}")
     logger.info(f"  Text Report: {text_report_path}")
@@ -198,43 +198,43 @@ def run_workflow_examples():
         seq_time = invoice_result.execution_time if invoice_result and hasattr(invoice_result, 'execution_time') else None
         parallel_time = invoice_result_parallel.execution_time if invoice_result_parallel and hasattr(invoice_result_parallel, 'execution_time') else None
         
-        logger.info(f"Invoice Processing:")
+        logger.info("Invoice Processing:")
         if seq_time is not None:
             logger.info(f"  Sequential: {seq_time:.2f}s")
         else:
-            logger.info(f"  Sequential: N/A")
+            logger.info("  Sequential: N/A")
             
         if parallel_time is not None:
             logger.info(f"  Parallel: {parallel_time:.2f}s")
         else:
-            logger.info(f"  Parallel: N/A")
+            logger.info("  Parallel: N/A")
             
         if seq_time is not None and parallel_time is not None and parallel_time > 0:
             speedup = seq_time / parallel_time
             logger.info(f"  Speedup: {speedup:.2f}x")
         else:
-            logger.info(f"  Speedup: N/A")
+            logger.info("  Speedup: N/A")
         
         # Compare reporting workflow
         seq_time = reporting_result.execution_time if reporting_result and hasattr(reporting_result, 'execution_time') else None
         parallel_time = reporting_result_parallel.execution_time if reporting_result_parallel and hasattr(reporting_result_parallel, 'execution_time') else None
         
-        logger.info(f"Financial Reporting:")
+        logger.info("Financial Reporting:")
         if seq_time is not None:
             logger.info(f"  Sequential: {seq_time:.2f}s")
         else:
-            logger.info(f"  Sequential: N/A")
+            logger.info("  Sequential: N/A")
             
         if parallel_time is not None:
             logger.info(f"  Parallel: {parallel_time:.2f}s")
         else:
-            logger.info(f"  Parallel: N/A")
+            logger.info("  Parallel: N/A")
             
         if seq_time is not None and parallel_time is not None and parallel_time > 0:
             speedup = seq_time / parallel_time
             logger.info(f"  Speedup: {speedup:.2f}x")
         else:
-            logger.info(f"  Speedup: N/A")
+            logger.info("  Speedup: N/A")
         
     logger.info(f"\nAll workflow results saved to: {args.output_dir}")
     logger.info("View the HTML reports for detailed execution information")

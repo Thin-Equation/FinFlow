@@ -8,8 +8,7 @@ document types accurately and route them to appropriate processors.
 import os
 import logging
 import re
-import hashlib
-from typing import Any, Dict, List, Optional, Tuple, Set, Union
+from typing import Any, Dict, List, Optional, Union
 from collections import Counter
 import json
 import time
@@ -18,7 +17,6 @@ from datetime import datetime
 # For text extraction and classification
 import fitz  # PyMuPDF
 from PIL import Image
-import numpy as np
 
 
 # Configure logging

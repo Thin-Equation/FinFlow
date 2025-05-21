@@ -4,17 +4,16 @@ This module provides tools to analyze validation results, verify rule applicatio
 and generate reports on validation coverage.
 """
 
-import json
+
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List
 import matplotlib.pyplot as plt
 import pandas as pd
-from io import StringIO, BytesIO
+from io import BytesIO
 import base64
 
 from models.validation import (
-    DocumentValidationResult, FieldValidationRule, ComplianceRuleSet,
-    ValidationError
+    DocumentValidationResult, ComplianceRuleSet,
 )
 
 

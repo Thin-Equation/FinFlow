@@ -9,7 +9,6 @@ This script will:
 """
 
 import os
-import json
 import time
 import logging
 from typing import Dict, Any, Optional

@@ -4,13 +4,8 @@ Test the validation agent's functionality.
 
 import asyncio
 import json
-from typing import Dict, List, Any
 
 from agents.validation_agent import ValidationAgent
-from models.validation import (
-    FieldValidationType, FieldValidationRule, RuleSeverity,
-    RuleCondition, ComplianceRuleSet
-)
 from utils.validation_utils import (
     get_validation_coverage, verify_rule_application, analyze_field_validation
 )

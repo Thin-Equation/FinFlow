@@ -3,14 +3,10 @@ Unit tests for the StorageAgent.
 """
 
 import json
-import pytest
 import unittest
-from datetime import datetime
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch
 
 from agents.storage_agent import StorageAgent
-from models.documents import DocumentType, DocumentStatus
-from tools import bigquery
 
 
 class TestStorageAgent(unittest.TestCase):

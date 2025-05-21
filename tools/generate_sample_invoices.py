@@ -172,8 +172,8 @@ def create_invoice_pdf(invoice_data: Dict[str, Any], output_path: str) -> None:
     
     # Company information
     company_data = [
-        [Paragraph(f"<b>FROM:</b>", styles['Normal']), 
-         Paragraph(f"<b>TO:</b>", styles['Normal'])],
+        [Paragraph("<b>FROM:</b>", styles['Normal']), 
+         Paragraph("<b>TO:</b>", styles['Normal'])],
         [Paragraph(f"{invoice_data['vendor']['name']}<br/>"
                    f"{invoice_data['vendor']['address']}<br/>"
                    f"Tax ID: {invoice_data['vendor']['tax_id']}", styles['Normal']),

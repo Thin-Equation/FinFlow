@@ -12,7 +12,7 @@ import json
 import logging
 import subprocess
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -203,7 +203,7 @@ class ParallelAgent:
                                     # Early termination if configured
                                     with context_lock:
                                         if not execution_context.get_state("continue_on_error", False):
-                                            self.logger.error(f"Workflow execution will terminate due to task failure")
+                                            self.logger.error("Workflow execution will terminate due to task failure")
                                             # Cancel all running tasks
                                             for running_id in running_tasks.copy():
                                                 if running_id != task_id:

@@ -9,7 +9,7 @@ import logging
 import json
 from decimal import Decimal
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Set, Tuple
+from typing import Dict, Any, Optional, Tuple
 import io
 import os
 import time
@@ -32,13 +32,9 @@ except ImportError:
     _HAS_VISUALIZATION = False
 
 from workflow.workflow_definitions import (
-    WorkflowDefinition, 
-    WorkflowExecutionContext,
+    WorkflowDefinition,
     WorkflowResult,
-    WorkflowStatus,
-    WorkflowTask,
     TaskStatus,
-    TaskId
 )
 
 class WorkflowMonitor:
@@ -382,7 +378,7 @@ class WorkflowMonitor:
             html_output.write("</style></head><body>")
             
             # Workflow info
-            html_output.write(f"<h1>Workflow Execution Report</h1>")
+            html_output.write("<h1>Workflow Execution Report</h1>")
             html_output.write(f"<h2>{workflow_info['name']}</h2>")
             html_output.write(f"<p>{workflow_info['description']}</p>")
             
@@ -434,14 +430,14 @@ class WorkflowMonitor:
             
         else:  # text format
             text_output = io.StringIO()
-            text_output.write(f"WORKFLOW EXECUTION REPORT\n")
-            text_output.write(f"======================\n\n")
+            text_output.write("WORKFLOW EXECUTION REPORT\n")
+            text_output.write("======================\n\n")
             text_output.write(f"Workflow: {workflow_info['name']} ({workflow_info['id']})\n")
             text_output.write(f"Description: {workflow_info['description']}\n")
             text_output.write(f"Type: {workflow_info['process_type']}\n\n")
             
-            text_output.write(f"EXECUTION SUMMARY\n")
-            text_output.write(f"-----------------\n")
+            text_output.write("EXECUTION SUMMARY\n")
+            text_output.write("-----------------\n")
             text_output.write(f"Status: {execution_info['status']}\n")
             if execution_info["execution_time"] is not None:
                 text_output.write(f"Execution Time: {execution_info['execution_time']:.2f} seconds\n")
@@ -451,8 +447,8 @@ class WorkflowMonitor:
                 text_output.write(f"Error: {execution_info['error']}\n")
             text_output.write("\n")
             
-            text_output.write(f"TASK SUMMARY\n")
-            text_output.write(f"------------\n")
+            text_output.write("TASK SUMMARY\n")
+            text_output.write("------------\n")
             text_output.write(f"Total Tasks: {task_summary['total']}\n")
             text_output.write(f"Completed: {task_summary['completed']}\n")
             text_output.write(f"Failed: {task_summary['failed']}\n")
@@ -460,8 +456,8 @@ class WorkflowMonitor:
             text_output.write(f"Pending: {task_summary['pending']}\n\n")
             
             if include_task_details:
-                text_output.write(f"TASK DETAILS\n")
-                text_output.write(f"------------\n")
+                text_output.write("TASK DETAILS\n")
+                text_output.write("------------\n")
                 
                 for task in task_details:
                     text_output.write(f"Task: {task['name']} ({task['id']})\n")
@@ -743,7 +739,7 @@ class WorkflowInspector:
         if metrics['estimated_remaining_time']:
             print(f"Estimated Remaining: {metrics['estimated_remaining_time']:.2f} seconds")
             
-        print(f"\nTasks:")
+        print("\nTasks:")
         print(f"  Total: {metrics['tasks_total']}")
         print(f"  Completed: {metrics['tasks_completed']}")
         print(f"  Running: {metrics['tasks_running']}")

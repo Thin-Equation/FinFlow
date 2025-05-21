@@ -7,10 +7,8 @@ before they are processed by Document AI.
 
 import os
 import logging
-import mimetypes
 import magic
-from typing import Any, Dict, List, Optional, Tuple, Union
-from pathlib import Path
+from typing import Any, Dict, List, Optional
 import shutil
 from datetime import datetime
 

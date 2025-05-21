@@ -114,7 +114,6 @@ class DocumentIngestionTool(FinflowTool):
             Ingestion operation results
         """
         document_path = parameters.get("document_path")
-        destination_folder = parameters.get("destination_folder")
         
         if not document_path:
             raise ValueError("Document path not provided")

@@ -5,9 +5,8 @@ Loads the appropriate configuration based on environment.
 
 import os
 import logging
-import importlib
 import yaml
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from dotenv import load_dotenv
 
 # Load environment variables from .env file

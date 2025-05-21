@@ -8,10 +8,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Any, Optional, Callable, Union, TypeVar, Generic, Set, Tuple
+from typing import Dict, List, Any, Optional, Callable, TypeVar, Generic, Set, Tuple
 import uuid
 import logging
-from concurrent.futures import Future
 
 # Type definitions for improved type safety
 T = TypeVar('T')

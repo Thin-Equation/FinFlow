@@ -15,13 +15,11 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, TypedDict, cast
 
-from google.adk.tools import BaseTool, ToolContext  # type: ignore
+from google.adk.tools import  ToolContext  # type: ignore
 from pydantic import BaseModel
 
 from agents.base_agent import BaseAgent
 from config.config_loader import ConfigLoader
-from models.documents import FinancialDocument, DocumentType, DocumentStatus
-from models.entities import FinancialEntity, EntityType
 from tools import bigquery
 
 
@@ -116,7 +114,7 @@ class StorageAgent(BaseAgent):
         
         # Initialize logger explicitly 
         import logging
-        self.logger = logging.getLogger(f"finflow.agents.FinFlow_Storage")
+        self.logger = logging.getLogger("finflow.agents.FinFlow_Storage")
         if not self.logger.handlers:
             handler = logging.StreamHandler()
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -3,15 +3,14 @@ Tests for the agent communication framework.
 """
 
 import unittest
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from utils.session_state import SessionState
 from utils.agent_communication import (
     create_message, send_message, get_messages, mark_message_read,
     MESSAGE_TYPE_REQUEST, MESSAGE_TYPE_RESPONSE, PRIORITY_NORMAL
 )
 from utils.agent_protocol import (
-    create_protocol_message, create_request, create_response,
+    create_request, create_response,
     MessageType, PriorityLevel, StatusCode
 )
 
