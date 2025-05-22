@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  finflow-server:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: finflow:latest
+    container_name: finflow-server
+    volumes:
+      - ./config:/etc/finflow
+      - ./logs:/var/log/finflow
+      - ./sample_data:/app/sample_data
+    ports:
+      - "8000:8000"
+    environment:
+      - FINFLOW_ENV=production
+      - GOOGLE_APPLICATION_CREDENTIALS=/etc/finflow/service-account.json
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - finflow-network
+
+  finflow-worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: finflow:latest
+    container_name: finflow-worker
+    command: ["python", "main.py", "--mode", "batch"]
+    volumes:
+      - ./config:/etc/finflow
+      - ./logs:/var/log/finflow
+      - ./sample_data:/app/sample_data
+      - ./batch_input:/app/batch_input
+      - ./batch_output:/app/batch_output
+    environment:
+      - FINFLOW_ENV=production
+      - GOOGLE_APPLICATION_CREDENTIALS=/etc/finflow/service-account.json
+    restart: unless-stopped
+    depends_on:
+      - finflow-server
+    networks:
+      - finflow-network
+
+networks:
+  finflow-network:
+    driver: bridge

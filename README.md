@@ -1,9 +1,11 @@
-# FinFlow - Financial Document Processing System
+# FinFlow - Financial Document Processing Platform
 
-A financial document processing and analysis platform built with Google's Agent Development Kit (ADK) and Google Cloud services.
+A production-ready financial document processing and analysis platform built with Google's Agent Development Kit (ADK) and Google Cloud services.
 
 ## Overview
 FinFlow is an intelligent system that analyzes, processes, and extracts insights from financial documents using multiple specialized agents. The system leverages Google Document AI for document processing, BigQuery for data storage, and Vertex AI Gemini models for intelligent processing.
+
+This project provides a complete end-to-end integration of all agent components into a production-level implementation with multiple deployment options, comprehensive testing, and robust configuration management.
 
 ## Features
 - Multi-agent architecture for specialized document processing tasks
@@ -49,10 +51,59 @@ The StorageAgent is responsible for all database operations in the FinFlow syste
 
 For more details, see [Storage Agent Documentation](docs/storage_agent.md).
 
+## Running the System
+
+FinFlow can be run in several modes to accommodate different use cases:
+
+### Server Mode
+Run as a web API server:
+```bash
+./start.sh production server 8000
+```
+
+Or using Python directly:
+```bash
+python main.py --env production --mode server --port 8000
+```
+
+### CLI Mode
+Run in interactive command-line mode:
+```bash
+./start.sh production cli
+```
+
+Or using Python directly:
+```bash
+python main.py --env production --mode cli
+```
+
+### Batch Processing Mode
+Process a directory of documents:
+```bash
+python main.py --env production --mode batch --batch-dir /path/to/documents
+```
+
+### Workflow Mode
+Run a specific workflow against a document:
+```bash
+python main.py --env production --mode workflow --workflow invoice --document /path/to/invoice.pdf
+```
+
+## Docker Deployment
+The system can be deployed using Docker:
+
+```bash
+# Build the Docker image
+docker build -t finflow .
+
+# Run with Docker Compose for full environment
+docker-compose up -d
+```
+
 ## Setup
 
 ### Prerequisites
-- Python 3.13+
+- Python 3.10+
 - Google Cloud project with the following APIs enabled:
   - Vertex AI API
   - Document AI API

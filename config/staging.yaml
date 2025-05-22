@@ -1,5 +1,49 @@
 # Staging environment configuration
 
+# System settings
+system:
+  name: "FinFlow Staging"
+  version: "1.0.0"
+  log_level: "DEBUG"
+  enable_telemetry: true
+  performance_monitoring: true
+
 # Google Cloud settings
 google_cloud:
   project_id: "finflow-hackathon"
+  region: "us-central1"
+  credentials_path: "/etc/finflow/service-account-staging.json"
+
+# BigQuery settings  
+bigquery:
+  project_id: "finflow-hackathon"
+  dataset_id: "finflow_staging"
+  location: "US"
+
+# Storage settings
+storage:
+  enable_cache: true
+  cache_ttl_seconds: 300
+  max_cache_size: 500
+  batch_size: 100
+  retry_attempts: 3
+  timeout_seconds: 45
+  storage_bucket: "finflow-staging-documents"
+  
+# Document processor settings
+document_processor:
+  processors:
+    invoice:
+      processor_id: "projects/finflow-hackathon/locations/us/processors/invoice-processor-staging"
+      min_confidence: 0.75
+    form:
+      processor_id: "projects/finflow-hackathon/locations/us/processors/form-processor-staging" 
+      min_confidence: 0.80
+  max_concurrent_requests: 10
+  request_timeout_seconds: 90
+
+# Analytics settings
+analytics:
+  enable_real_time: true
+  retention_days: 30
+  reporting_interval_minutes: 30

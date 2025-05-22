@@ -1,5 +1,49 @@
 # Production environment configuration
 
+# System settings
+system:
+  name: "FinFlow Production"
+  version: "1.0.0"
+  log_level: "INFO"
+  enable_telemetry: true
+  performance_monitoring: true
+
 # Google Cloud settings
 google_cloud:
   project_id: "finflow-hackathon"
+  region: "us-central1"
+  credentials_path: "/etc/finflow/service-account.json"
+
+# BigQuery settings  
+bigquery:
+  project_id: "finflow-hackathon"
+  dataset_id: "finflow_production"
+  location: "US"
+
+# Storage settings
+storage:
+  enable_cache: true
+  cache_ttl_seconds: 600
+  max_cache_size: 1000
+  batch_size: 250
+  retry_attempts: 5
+  timeout_seconds: 60
+  storage_bucket: "finflow-production-documents"
+  
+# Document processor settings
+document_processor:
+  processors:
+    invoice:
+      processor_id: "projects/finflow-hackathon/locations/us/processors/invoice-processor"
+      min_confidence: 0.85
+    form:
+      processor_id: "projects/finflow-hackathon/locations/us/processors/form-processor" 
+      min_confidence: 0.90
+  max_concurrent_requests: 20
+  request_timeout_seconds: 120
+
+# Analytics settings
+analytics:
+  enable_real_time: true
+  retention_days: 90
+  reporting_interval_minutes: 60

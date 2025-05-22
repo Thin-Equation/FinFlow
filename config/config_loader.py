@@ -1,12 +1,16 @@
+# filepath: /Users/dhairyagundechia/Downloads/finflow/config/config_loader.py
 """
 Configuration loader for FinFlow.
-Loads the appropriate configuration based on environment.
+Loads the appropriate configuration based on environment with support for
+overrides, secrets management, and component-specific configurations.
 """
 
 import os
 import logging
 import yaml
-from typing import Dict, Any
+import json
+from pathlib import Path
+from typing import Dict, Any, Optional, Union
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -17,23 +21,47 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigLoader:
-    """Configuration loader for FinFlow."""
+    """
+    Configuration loader for FinFlow with robust environment and override support.
     
-    def __init__(self):
-        """Initialize the configuration loader."""
-        self.env = os.environ.get('FINFLOW_ENV', 'development')
+    Features:
+    - Environment-based configuration (dev/staging/prod)
+    - Local override support
+    - Secrets management
+    - Component-specific configuration
+    - Configuration validation
+    """
+    
+    def __init__(self, env: Optional[str] = None):
+        """
+        Initialize the configuration loader.
+        
+        Args:
+            env: Optional environment override (development, staging, production)
+        """
+        self.env = env or os.environ.get('FINFLOW_ENV', 'development')
         self.config_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_cache: Dict[str, Dict[str, Any]] = {}
+        
+        # Validate environment
+        if self.env not in ('development', 'staging', 'production'):
+            logger.warning(f"Invalid environment: {self.env}, defaulting to development")
+            self.env = 'development'
+        
+        logger.info(f"Initialized ConfigLoader for environment: {self.env}")
     
-    def load_config(self) -> Dict[str, Any]:
+    def load_config(self, reload: bool = False) -> Dict[str, Any]:
         """
         Load the appropriate configuration based on environment.
         
+        Args:
+            reload: Force reload configuration from disk
+            
         Returns:
             Dict[str, Any]: Configuration dictionary
         """
-        # Return cached config if available
-        if "main" in self.config_cache:
+        # Return cached config if available and not reloading
+        if "main" in self.config_cache and not reload:
             return self.config_cache["main"]
         
         # Load base config
@@ -63,6 +91,10 @@ class ConfigLoader:
         # Load specialized configurations
         self._load_specialized_configs(config)
         
+        # Validate configuration
+        if not self.validate_config(config):
+            logger.warning("Configuration validation failed")
+        
         # Cache the config
         self.config_cache["main"] = config
         
@@ -81,12 +113,23 @@ class ConfigLoader:
             storage_config = get_storage_config()
             if "storage" not in config:
                 config["storage"] = {}
-            _deep_merge(config, {"storage": storage_config})
+            _deep_merge(config["storage"], storage_config)
             logger.info("Storage configuration loaded and merged")
         except ImportError:
             logger.info("No specialized storage configuration found")
         
-        # Additional specialized configs can be added here following the same pattern
+        # Load document processor configuration
+        try:
+            from config.document_processor_config import get_document_processor_config
+            doc_config = get_document_processor_config()
+            if "document_processor" not in config:
+                config["document_processor"] = {}
+            _deep_merge(config["document_processor"], doc_config)
+            logger.info("Document processor configuration loaded and merged")
+        except ImportError:
+            logger.info("No specialized document processor configuration found")
+        
+        # Additional specialized configs can be added here
     
     def get_storage_config(self) -> Dict[str, Any]:
         """
@@ -100,34 +143,64 @@ class ConfigLoader:
         
         # Return storage section of config
         return config.get("storage", {})
-
-
-# For backwards compatibility with existing code
-def load_config() -> Dict[str, Any]:
-    """
-    Load the appropriate configuration based on environment.
     
-    Returns:
-        Dict[str, Any]: Configuration dictionary
-    """
-    return ConfigLoader().load_config()
+    def validate_config(self, config: Dict[str, Any]) -> bool:
+        """
+        Validate the loaded configuration.
+        
+        Args:
+            config: Configuration to validate
+            
+        Returns:
+            bool: True if configuration is valid, False otherwise
+        """
+        # Check required configurations
+        required_keys = ["google_cloud"]
+        missing_keys = [key for key in required_keys if key not in config]
+        
+        if missing_keys:
+            logger.error(f"Missing required configuration keys: {missing_keys}")
+            return False
+        
+        # Check for Google Cloud credentials
+        if "google_cloud" in config:
+            if "project_id" not in config["google_cloud"]:
+                logger.error("Missing required Google Cloud project_id in configuration")
+                return False
+                
+        return True
 
+
+# Helper function for deep merging dictionaries
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Deep merge two dictionaries.
+    Deep merge two dictionaries, with override values taking precedence.
     
     Args:
         base: Base dictionary
-        override: Override dictionary
+        override: Dictionary with override values
     
     Returns:
         Dict[str, Any]: Merged dictionary
     """
     for key, value in override.items():
         if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-            # Add type ignore comment to suppress the unknown argument type error
-            _deep_merge(base[key], value)  # type: ignore
+            _deep_merge(base[key], value)
         else:
             base[key] = value
-    
     return base
+
+
+# For backwards compatibility with existing code
+def load_config(reload: bool = False) -> Dict[str, Any]:
+    """
+    Load the appropriate configuration based on environment.
+    
+    Args:
+        reload: Force reload configuration from disk
+    
+    Returns:
+        Dict[str, Any]: Configuration dictionary
+    """
+    loader = ConfigLoader()
+    return loader.load_config(reload=reload)

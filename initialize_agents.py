@@ -17,7 +17,6 @@ from config.config_loader import load_config
 # Import agents
 from agents.master_orchestrator import MasterOrchestratorAgent
 from agents.document_processor import DocumentProcessorAgent
-from agents.rule_retrieval import RuleRetrievalAgent
 from agents.validation_agent import ValidationAgent
 from agents.storage_agent import StorageAgent
 from agents.analytics_agent import AnalyticsAgent
@@ -36,7 +35,7 @@ def initialize_system(config: Dict[str, Any]) -> Dict[str, Any]:
     
     # Initialize agents
     document_processor = DocumentProcessorAgent()
-    rule_retrieval = RuleRetrievalAgent()
+
     validation_agent = ValidationAgent()
     storage_agent = StorageAgent()
     analytics_agent = AnalyticsAgent()
@@ -44,7 +43,6 @@ def initialize_system(config: Dict[str, Any]) -> Dict[str, Any]:
     # Initialize master orchestrator with worker agents
     master_orchestrator = MasterOrchestratorAgent(
         document_processor=document_processor,
-        rule_retrieval=rule_retrieval,
         validation_agent=validation_agent,
         storage_agent=storage_agent,
         analytics_agent=analytics_agent
@@ -61,7 +59,6 @@ def initialize_system(config: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "master_orchestrator": master_orchestrator,
         "document_processor": document_processor,
-        "rule_retrieval": rule_retrieval,
         "validation_agent": validation_agent,
         "storage_agent": storage_agent,
         "analytics_agent": analytics_agent

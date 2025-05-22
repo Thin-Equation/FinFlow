@@ -6,6 +6,18 @@ google-cloud-documentai>=2.16.0
 google-cloud-bigquery>=3.10.0
 google-cloud-storage>=2.10.0
 
+# Server dependencies
+fastapi>=0.95.1
+uvicorn>=0.22.0
+python-multipart>=0.0.6
+httpx>=0.24.0
+starlette>=0.27.0
+
+# CLI dependencies
+cmd2>=2.4.3
+rich>=13.3.5
+prompt_toolkit>=3.0.38
+
 # Workflow system dependencies
 networkx>=3.1.0
 matplotlib>=3.7.1
@@ -42,3 +54,11 @@ pydantic>=2.0.0
 matplotlib>=3.7.1
 jsonschema>=4.17.3
 semver>=3.0.1
+
+# Server-specific dependencies for FinFlow
+jinja2>=3.1.2
+itsdangerous>=2.1.2
+python-jose[cryptography]>=3.3.0
+passlib>=1.7.4
+bcrypt>=4.0.1
+aiofiles>=22.1.0
