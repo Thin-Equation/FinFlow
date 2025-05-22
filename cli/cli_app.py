@@ -5,11 +5,10 @@ This module provides an interactive command-line interface for the FinFlow syste
 """
 
 import os
-import sys
 import logging
 import time
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from datetime import datetime
 import cmd
 import argparse

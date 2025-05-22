@@ -2,6 +2,9 @@
 Document AI integration tools for the FinFlow system.
 """
 
+import os
+import logging
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from google.adk.tools import ToolContext  # type: ignore
 from google.cloud import documentai_v1 as documentai
@@ -139,11 +142,6 @@ def base64_to_bytes(base64_string: str) -> bytes:
     """
     return base64.b64decode(base64_string)
 
-
-# Invoice processor functions
-from dataclasses import dataclass
-import os
-import logging
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -449,7 +447,7 @@ def evaluate_processor_performance(processor_id: str, evaluation_data_path: str)
         if len(confidence_scores) > 1:
             try:
                 std_dev = statistics.stdev(confidence_scores)
-            except:
+            except (TypeError, ValueError, statistics.StatisticsError):
                 # Fallback in case of type issues
                 mean = avg_confidence
                 variance_sum = sum((x - mean) ** 2 for x in confidence_scores)

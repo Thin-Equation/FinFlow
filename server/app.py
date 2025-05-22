@@ -6,14 +6,11 @@ This module provides a FastAPI server implementation for the FinFlow platform.
 
 import logging
 import os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from datetime import datetime
-import json
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Depends, Query, Body, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)

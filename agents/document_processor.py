@@ -152,7 +152,7 @@ class DocumentProcessorAgent(BaseAgent):
         """Initialize document processing components."""
         try:
             # Import enhanced modules
-            from tools.enhanced_document_ai import DocumentProcessor, create_processor_instance
+            from tools.enhanced_document_ai import create_processor_instance
             from tools.enhanced_document_ingestion import DocumentIngestionManager
             from tools.document_classification import DocumentClassifier
             
@@ -482,8 +482,6 @@ class DocumentProcessorAgent(BaseAgent):
                 try:
                     # Detect if this is an invoice or receipt to use specialized processor
                     _, ext = os.path.splitext(document_path.lower())
-                    file_type = ext.lstrip(".")
-                    
                     # Initialize result
                     extracted_info = {}
                     
@@ -686,7 +684,7 @@ class DocumentProcessorAgent(BaseAgent):
                 try:
                     import json
                     line_items = json.loads(line_items)
-                except:
+                except (ValueError, TypeError, json.JSONDecodeError):
                     line_items = [{"description": line_items, "amount": "unknown"}]
             elif not isinstance(line_items, list):
                 line_items = []
@@ -1381,7 +1379,7 @@ class DocumentProcessorAgent(BaseAgent):
                 
         return context
         
-    def batch_process_documents(self, context: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
+    def batch_process_documents_parallel(self, context: Dict[str, Any], tool_context: Optional[ToolContext] = None) -> Dict[str, Any]:
         """
         Process multiple documents in parallel.
         
@@ -1556,7 +1554,7 @@ class DocumentProcessorAgent(BaseAgent):
                 norm_settings = self.config["processor_configs"][document_type].get("normalization", {})
             
             # Normalize dates (if we have date fields)
-            date_format = norm_settings.get("date_format", "YYYY-MM-DD")
+            # Date format will be used when we implement actual normalization
             for field in ["date", "issue_date", "invoice_date", "due_date", "transaction_date", "statement_date", "period_start", "period_end"]:
                 if field in normalized and normalized[field]:
                     # Here we'd implement actual date normalization based on date_format
@@ -1772,15 +1770,15 @@ class DocumentProcessorAgent(BaseAgent):
         except Exception as e:
             self.logger.warning(f"Error updating metrics: {str(e)}")
     
-    def get_batch_status(self, batch_id: str) -> Dict[str, Any]:
+    def get_detailed_batch_status(self, batch_id: str) -> Dict[str, Any]:
         """
-        Get status of a batch processing job.
+        Get detailed status of a batch processing job.
         
         Args:
             batch_id: ID of the batch job
             
         Returns:
-            Status information for the batch job
+            Detailed status information for the batch job
         """
         if batch_id in self.active_batches:
             return self.active_batches[batch_id]
@@ -1795,9 +1793,9 @@ class DocumentProcessorAgent(BaseAgent):
             "timestamp": datetime.now().isoformat()
         }
         
-    def log_activity(self, activity_type: str, activity_data: Dict[str, Any], context: Dict[str, Any]) -> None:
+    def log_processing_activity(self, activity_type: str, activity_data: Dict[str, Any], context: Dict[str, Any]) -> None:
         """
-        Log agent activity for telemetry and auditing.
+        Log document processing activity for telemetry and auditing.
         
         Args:
             activity_type: Type of activity (e.g., document_processing_complete)

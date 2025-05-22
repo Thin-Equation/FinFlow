@@ -19,8 +19,7 @@ from utils.agent_communication import (
     get_messages, create_response
 )
 from utils.agent_protocol import (
-    MessageType, PriorityLevel, StatusCode, 
-    create_response
+    MessageType, PriorityLevel, StatusCode
 )
 from utils.session_state import get_or_create_session_state
 
@@ -354,7 +353,7 @@ You should:
         
         if action == "delegated_task_completed":
             # Handle task completion
-            delegation_request_id = data.get("delegation_request_id")
+            # Get workflow ID
             workflow_id = data.get("workflow_id")
             
             if workflow_id:

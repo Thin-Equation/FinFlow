@@ -8,10 +8,9 @@ import os
 import logging
 import time
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from datetime import datetime
 import concurrent.futures
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

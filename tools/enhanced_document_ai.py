@@ -894,7 +894,7 @@ class DocumentProcessor:
                 
                 # Check and process each page
                 for page_num in range(len(doc)):
-                    page = doc[page_num]
+                    # Document page would be accessed as: doc[page_num]
                     # Perform optimization actions here
                     # In a production system, you would implement:
                     # - OCR if needed

@@ -6,15 +6,23 @@ import logging
 import json
 import traceback
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Dict, List, Optional, TypeVar, Callable, Union
 
 # Google ADK imports with type ignores for dependencies
 from google.adk.agents import LlmAgent  # type: ignore
 from google.adk.tools import BaseTool, ToolContext  # type: ignore
 from utils.logging_config import TraceContext
+from utils.error_handling import (
+    FinFlowError, AgentError, ErrorSeverity, ErrorManager, 
+    retry, circuit_protected, ErrorBoundary, capture_exceptions
+)
+from utils.metrics import (
+    AppMetricsCollector, time_function, count_invocations, track_errors
+)
 
 # Define type variable for generic function returns
 T = TypeVar('T')
+F = TypeVar('F', bound=Callable[..., Any])
 
 class BaseAgent(LlmAgent):
     """Base agent class with common functionality for all FinFlow agents."""
@@ -30,6 +38,9 @@ class BaseAgent(LlmAgent):
         instruction: str = "",
         tools: Optional[List[BaseTool]] = None,
         temperature: float = 0.2,
+        retry_attempts: int = 3,
+        circuit_breaker_enabled: bool = True,
+        error_manager: Optional[ErrorManager] = None,
     ):
         """Initialize the base agent.
         
@@ -40,6 +51,9 @@ class BaseAgent(LlmAgent):
             instruction: The instruction prompt for the agent.
             tools: List of tools to add to the agent.
             temperature: The temperature for the agent's model.
+            retry_attempts: Number of retry attempts for agent operations.
+            circuit_breaker_enabled: Whether to use circuit breaker pattern.
+            error_manager: Optional custom error manager.
         """
         # Create a proper logger and configure it
         logger = logging.getLogger(f"finflow.agents.{name}")
@@ -52,6 +66,15 @@ class BaseAgent(LlmAgent):
         
         # Store logger in __dict__ to bypass Pydantic validation
         self.__dict__["logger"] = logger
+        
+        # Store agent configuration
+        self.__dict__["agent_name"] = name
+        self.__dict__["retry_attempts"] = retry_attempts
+        self.__dict__["circuit_breaker_enabled"] = circuit_breaker_enabled
+        self.__dict__["error_manager"] = error_manager or ErrorManager.get_instance()
+        
+        # Initialize metrics collector
+        self.__dict__["metrics"] = AppMetricsCollector.get_instance()
         
         # Call parent constructor with necessary parameters
         # We need to use type: ignore because of complex typing in ADK
@@ -91,11 +114,179 @@ class BaseAgent(LlmAgent):
         if tools:
             for tool in tools:
                 self.__dict__["add_tool"](tool)
+                
+        logger.info(f"Agent {name} initialized with model {model}")
     
     def log_context(self, context: Dict[str, Any]) -> None:
         """Log the current context for debugging purposes."""
         self.logger.debug(f"Agent context: {context}")
     
+    @count_invocations("agent_operation_count")
+    @time_function("agent_operation_time")
+    @track_errors("agent_error_count")
+    @capture_exceptions(AgentError)
+    def execute_with_monitoring(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """
+        Execute an agent operation with monitoring and error handling.
+        
+        Args:
+            func: Function to execute
+            *args: Positional arguments for the function
+            **kwargs: Keyword arguments for the function
+            
+        Returns:
+            Function result
+            
+        Raises:
+            AgentError: If the operation fails
+        """
+        agent_name = self.__dict__.get("agent_name", "unknown")
+        operation = func.__name__
+        
+        # Start metrics timer
+        metrics = self.__dict__.get("metrics")
+        timer_context = metrics.track_agent_call(agent_name, operation)
+        
+        try:
+            with timer_context:
+                return func(*args, **kwargs)
+        except Exception as e:
+            # Track error in metrics
+            metrics.track_agent_error(agent_name, e.__class__.__name__)
+            
+            # Wrap in AgentError for consistent handling
+            if not isinstance(e, AgentError):
+                raise AgentError(
+                    f"Agent operation {operation} failed: {str(e)}",
+                    agent_name=agent_name,
+                    severity=ErrorSeverity.HIGH,
+                    cause=e
+                ) from e
+            
+            # Re-raise agent errors
+            raise
+    
+    def handle_error(self, error: Exception, context: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Handle errors during agent execution with robust error recovery.
+        
+        Args:
+            error: The error that occurred
+            context: The execution context
+            
+        Returns:
+            Updated context with error information
+        """
+        agent_name = self.__dict__.get("agent_name", "unknown")
+        error_manager = self.__dict__.get("error_manager")
+        
+        # Log the error with full traceback
+        self.logger.error(
+            f"Error in agent {agent_name}: {error}", 
+            exc_info=True
+        )
+        
+        # Convert to FinFlowError if it's not already
+        if not isinstance(error, FinFlowError):
+            error = AgentError(
+                str(error),
+                agent_name=agent_name,
+                severity=ErrorSeverity.HIGH,
+                cause=error
+            )
+        
+        # Add error details to context
+        error_details = {
+            "error": error.to_dict() if isinstance(error, FinFlowError) else str(error),
+            "timestamp": datetime.now().isoformat(),
+            "traceback": traceback.format_exc(),
+        }
+        
+        context["error"] = error_details
+        context["success"] = False
+        
+        # Send to error manager for centralized handling
+        if error_manager:
+            error_manager.handle_error(error)
+        
+        # Track in metrics
+        metrics = self.__dict__.get("metrics")
+        if metrics:
+            metrics.track_agent_error(agent_name, error.__class__.__name__)
+        
+        return context
+    
+    @retry(max_attempts=3, delay=1.0, backoff=2.0)
+    def execute_with_retry(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+        """
+        Execute a function with automatic retry for transient failures.
+        
+        Args:
+            func: Function to execute
+            *args: Positional arguments
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Function result
+            
+        Raises:
+            AgentError: If all retries fail
+        """
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Wrap in AgentError for consistent handling
+            agent_name = self.__dict__.get("agent_name", "unknown")
+            raise AgentError(
+                f"Function execution failed after retries: {str(e)}",
+                agent_name=agent_name,
+                severity=ErrorSeverity.HIGH,
+                cause=e
+            ) from e
+    
+    def safe_execute(self, func: Callable[..., T], *args: Any, fallback: Any = None, **kwargs: Any) -> Union[T, Any]:
+        """
+        Execute a function with error boundary protection.
+        
+        Args:
+            func: Function to execute
+            *args: Positional arguments
+            fallback: Fallback value if execution fails
+            **kwargs: Keyword arguments
+            
+        Returns:
+            Function result or fallback value if execution fails
+        """
+        agent_name = self.__dict__.get("agent_name", "unknown")
+        boundary = ErrorBoundary(f"agent_{agent_name}", fallback_value=fallback)
+        return boundary.execute(func, *args, **kwargs)
+    
+    def with_circuit_breaker(self, circuit_name: str) -> Callable[[F], F]:
+        """
+        Create a decorator for circuit breaker protection.
+        
+        Args:
+            circuit_name: Name of the circuit
+            
+        Returns:
+            Decorator function that applies circuit breaker protection
+        """
+        agent_name = self.__dict__.get("agent_name", "unknown")
+        full_circuit_name = f"{agent_name}_{circuit_name}"
+        
+        # Only apply circuit breaker if enabled
+        if self.__dict__.get("circuit_breaker_enabled", True):
+            return circuit_protected(
+                circuit_name=full_circuit_name,
+                failure_threshold=5,
+                recovery_timeout=60.0
+            )
+        else:
+            # Return a pass-through decorator
+            def passthrough_decorator(func: F) -> F:
+                return func
+            return passthrough_decorator
+            
     def handle_error(self, error: Exception, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Handle errors during agent execution.
