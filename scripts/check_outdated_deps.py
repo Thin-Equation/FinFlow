@@ -13,9 +13,8 @@ import os
 import sys
 import json
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 import re
-import time
 from datetime import datetime
 
 # ANSI color codes for better readability
@@ -150,9 +149,6 @@ def main():
     # Get current constraints
     current_requirements = parse_requirements(requirements_path)
     
-    # Get installed package versions
-    installed_packages = get_installed_packages()
-    
     # Get outdated packages
     outdated_packages = get_outdated_packages()
     
@@ -196,9 +192,9 @@ def main():
         
         print(f"\n{GREEN}Suggested updates written to: requirements.suggested.txt{RESET}")
         print(f"\n{BLUE}To apply suggested updates:{RESET}")
-        print(f"1. Review the suggested file")
-        print(f"2. If satisfied: cp requirements.suggested.txt requirements.txt")
-        print(f"3. Then run: pip install -r requirements.txt")
+        print("1. Review the suggested file")
+        print("2. If satisfied: cp requirements.suggested.txt requirements.txt")
+        print("3. Then run: pip install -r requirements.txt")
     
     return 0
 
