@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Set, Callable
 from concurrent.futures import ThreadPoolExecutor, Future, wait, FIRST_COMPLETED
 import threading
-
 from workflow.workflow_definitions import (
     WorkflowDefinition, 
     WorkflowExecutionContext,
@@ -21,8 +20,10 @@ from workflow.workflow_definitions import (
     TaskStatus,
     TaskId
 )
-
 from utils.session_state import get_or_create_session_state
+
+# Create a logger instance
+logger = logging.getLogger(__name__)
 
 class ParallelAgent:
     """Agent for parallel execution of workflow tasks."""

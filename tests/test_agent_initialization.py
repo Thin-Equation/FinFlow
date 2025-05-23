@@ -11,13 +11,11 @@ import os
 import tempfile
 import yaml
 from typing import Any, Dict
+from agents.base_agent import BaseAgent
 
 # Set up mocks for the ADK imports
 sys.modules['google.adk.agents'] = MagicMock()
 sys.modules['google.adk.tools'] = MagicMock()
-
-# Now we can import safely
-from agents.base_agent import BaseAgent
 
 class TestAgentInitialization(unittest.TestCase):
     """Test cases for agent initialization and configuration."""

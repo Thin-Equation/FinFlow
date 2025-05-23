@@ -187,7 +187,7 @@ def create_invoice_processing_workflow() -> WorkflowDefinition:
     workflow.add_task(archive_task)
     
     # Add conditional branching for approval
-    approval_branches = ConditionalBranching.add_switch(
+    ConditionalBranching.add_switch(
         workflow=workflow,
         switch_name="approval_routing",
         branches=[high_value_branch, medium_value_branch, low_value_branch],
@@ -366,7 +366,7 @@ def create_financial_reporting_workflow() -> WorkflowDefinition:
     workflow.add_task(archive_task)
     
     # Add conditional branching for distribution
-    distribution_branches = ConditionalBranching.add_switch(
+    ConditionalBranching.add_switch(
         workflow=workflow,
         switch_name="report_distribution",
         branches=[email_branch, portal_branch],
@@ -505,7 +505,8 @@ def record_transaction(context: WorkflowExecutionContext) -> Dict[str, Any]:
     time.sleep(0.4)
     
     invoice_data = context.get_result("extract_invoice_data")
-    payment_data = context.get_result("process_payment")
+    # Payment data will be used in future implementation
+    # payment_data = context.get_result("process_payment")
     
     return {
         "transaction_id": f"TXN-{int(time.time())}",

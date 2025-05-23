@@ -1425,7 +1425,7 @@ class StorageAgent(BaseAgent):
                 if "content" in version_data:
                     try:
                         version_data["content"] = json.loads(version_data["content"])
-                    except:
+                    except (ValueError, TypeError, json.JSONDecodeError):
                         pass
                 
                 return {
@@ -1566,7 +1566,7 @@ class StorageAgent(BaseAgent):
                     if "details" in row and row["details"]:
                         try:
                             row["details"] = json.loads(row["details"])
-                        except:
+                        except (ValueError, TypeError, json.JSONDecodeError):
                             pass
             
             return {

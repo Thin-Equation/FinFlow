@@ -98,7 +98,7 @@ def process_document(document_path: str, agents: Dict[str, Any], config: Dict[st
     checkpointer = create_workflow_checkpointer("document_processing", context)
     
     # Create trace context for distributed tracing
-    with TraceContext(workflow_id) as trace:
+    with TraceContext(workflow_id):
         try:
             # Start metrics timer
             doc_timer = metrics.track_document("general")
@@ -108,7 +108,7 @@ def process_document(document_path: str, agents: Dict[str, Any], config: Dict[st
             
             # Get document extension for metrics
             _, ext = os.path.splitext(document_path)
-            doc_type = ext[1:] if ext else "unknown"
+            # Document type can be used for metrics in the future
             
             # Use the master orchestrator to process the document
             master_orchestrator = cast(MasterOrchestratorAgent, agents["master_orchestrator"])

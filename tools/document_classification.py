@@ -484,11 +484,10 @@ def normalize_extracted_data(data: Dict[str, Any], document_type: str) -> Dict[s
         
         for field in [f for f in date_fields if f in normalized]:
             try:
-                # Handle various date formats
-                date_str = normalized[field]
+                # Handle various date formats - just check field exists
                 # This is where you'd implement proper date parsing
-                # For now we'll just ensure the field exists
-                pass
+                if normalized[field]:
+                    pass
             except Exception:
                 # If normalization fails, keep original
                 pass

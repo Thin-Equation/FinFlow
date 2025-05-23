@@ -15,13 +15,6 @@ from typing import Any, Dict, Optional
 from google.adk.tools import ToolContext # type: ignore
 
 from agents.base_agent import BaseAgent
-
-# Forward references for type hints
-DocumentProcessorAgent = Any
-ValidationAgent = Any
-StorageAgent = Any
-AnalyticsAgent = Any
-
 from utils.prompt_templates import get_agent_prompt
 from utils.logging_config import TraceContext, log_agent_call
 from utils.session_state import get_or_create_session_state
@@ -36,6 +29,12 @@ from utils.agent_communication import (
 from utils.agent_protocol import (
     PriorityLevel,
 )
+
+# Forward references for type hints
+DocumentProcessorAgent = Any
+ValidationAgent = Any
+StorageAgent = Any
+AnalyticsAgent = Any
 
 class MasterOrchestratorAgent(BaseAgent):
     """
@@ -120,8 +119,8 @@ class MasterOrchestratorAgent(BaseAgent):
         Returns:
             Dict[str, Any]: Updated context with initialized delegation framework
         """
-        # Get or create session state
-        session_state = get_or_create_session_state(context)
+        # Get or create session state (used indirectly by register_agent_capabilities)
+        get_or_create_session_state(context)
         
         # Register agent capabilities in registry
         for name, agent in self.worker_agents.items():

@@ -286,37 +286,6 @@ class BaseAgent(LlmAgent):
             def passthrough_decorator(func: F) -> F:
                 return func
             return passthrough_decorator
-            
-    def handle_error(self, error: Exception, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Handle errors during agent execution.
-        
-        Args:
-            error: The exception that was raised
-            context: The current context
-            
-        Returns:
-            Dict[str, Any]: Updated context with error information
-        """
-        error_id = datetime.now().strftime("%Y%m%d%H%M%S")
-        error_stack = traceback.format_exc()
-        
-        self.logger.error(
-            f"Error in {self.name} [ID: {error_id}]: {str(error)}",
-            exc_info=True
-        )
-        
-        # Add detailed error info to context
-        context["error"] = {
-            "id": error_id,
-            "timestamp": datetime.now().isoformat(),
-            "agent": self.name,
-            "message": str(error),
-            "type": error.__class__.__name__,
-            "stack_trace": error_stack
-        }
-        
-        return context
     
     def update_session_state(self, state_key: str, state_value: Any, context: Dict[str, Any]) -> Dict[str, Any]:
         """

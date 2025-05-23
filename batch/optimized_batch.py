@@ -10,10 +10,12 @@ This module provides high-performance batch processing capabilities with:
 """
 
 import os
+import sys
 import logging
 import time
 import json
 import uuid
+import psutil
 import threading
 import concurrent.futures
 from pathlib import Path
@@ -460,8 +462,9 @@ class OptimizedBatchProcessor:
         # Sort documents by size (smallest first for quick wins)
         try:
             documents.sort(key=lambda x: os.path.getsize(x))
-        except:
+        except (OSError, FileNotFoundError) as e:
             # If sorting fails, just use the original order
+            self.logger.warning(f"Failed to sort documents by size: {str(e)}")
             pass
         
         self.logger.info(f"Found {len(documents)} documents to process in {batch_dir}")
@@ -621,7 +624,6 @@ class OptimizedBatchProcessor:
         with self.batch_timer:
             try:
                 # Load or create batch
-                loaded_batch = None
                 if resume_batch:
                     loaded_data = self._load_checkpoint(batch_id)
                     if loaded_data:

@@ -111,7 +111,7 @@ class SessionState:
             try:
                 # Try to convert to string
                 session.session_id = str(data["session_id"])
-            except:
+            except Exception:
                 # Keep original if conversion fails
                 pass
                 
@@ -120,7 +120,7 @@ class SessionState:
             try:
                 # Try to get as string
                 session.created_at = str(data["created_at"])
-            except:
+            except Exception:
                 # Keep original if conversion fails
                 pass
                 
@@ -129,7 +129,7 @@ class SessionState:
             try:
                 # Try to get as string
                 session.last_updated = str(data["last_updated"])
-            except:
+            except Exception:
                 # Keep original if conversion fails
                 pass
             
@@ -223,7 +223,7 @@ class SessionState:
             data = json.loads(json_str)
             # We can safely pass this to from_dict as it handles non-dict values
             return cls.from_dict(cast(Dict[str, Any], data))
-        except:
+        except Exception:
             # On any error, return a new empty session
             return cls()
     

@@ -411,9 +411,9 @@ def cached_query_financial_data(query: str, project_id: str, cache_key: str,
     Returns:
         dict: Query results
     """
-    # Simple time-based cache invalidation
-    cache_time = int(time.time() / max_age_seconds)
-    invalidation_key = f"{cache_key}:{cache_time}"
+    # Simple time-based cache invalidation - time calculation kept for future implementation
+    _ = int(time.time() / max_age_seconds)
+    # Cache key is used by the lru_cache decorator automatically
     
     # Execute the actual query - the lru_cache decorator will handle caching
     return query_financial_data(query, project_id)

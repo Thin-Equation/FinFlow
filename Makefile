@@ -30,6 +30,26 @@ test-e2e:
 # Run linting
 lint:
 	flake8 .
+	black --check .
+	isort --check .
+
+# Check dependencies
+check-deps:
+	./scripts/check_dependencies.py
+
+# Check for outdated dependencies
+outdated-deps:
+	./scripts/check_outdated_deps.py
+
+# Update dependencies
+update-deps:
+	pip install --upgrade -r requirements.txt
+	pip freeze > requirements.frozen.txt
+
+# Setup development environment
+setup-dev:
+	./setup_dependencies.sh
+	flake8 .
 	mypy .
 	black --check .
 

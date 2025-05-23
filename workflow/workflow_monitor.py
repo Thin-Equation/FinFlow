@@ -13,7 +13,11 @@ from typing import Dict, Any, Optional, Tuple
 import io
 import os
 import time
-
+from workflow.workflow_definitions import (
+    WorkflowDefinition,
+    WorkflowResult,
+    TaskStatus,
+)
 
 # Custom JSON encoder to handle Decimal objects
 class DecimalEncoder(json.JSONEncoder):
@@ -22,20 +26,14 @@ class DecimalEncoder(json.JSONEncoder):
             return float(obj)
         return super(DecimalEncoder, self).default(obj)
 
+# Try to import visualization libraries (optional dependencies)
 try:
-    # Try to import visualization libraries (optional dependencies)
     import matplotlib.pyplot as plt
     import networkx as nx
-    from IPython.display import display, HTML
+    from IPython.display import display, HTML  # type: ignore
     _HAS_VISUALIZATION = True
 except ImportError:
     _HAS_VISUALIZATION = False
-
-from workflow.workflow_definitions import (
-    WorkflowDefinition,
-    WorkflowResult,
-    TaskStatus,
-)
 
 class WorkflowMonitor:
     """

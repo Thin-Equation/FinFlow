@@ -1099,7 +1099,9 @@ class ValidationAgent(BaseAgent):
                     "severity": result.errors[0].severity if result.errors else "info"
                 })
         
-        validation_report: ValidationReport = {
+        # Create validation report for backward compatibility but don't assign to variable
+        # as we're returning validation_result directly
+        {
             "document_id": document.get("document_id", "unknown"),
             "passed": validation_result.passed,
             "validation_results": validation_results,

@@ -480,13 +480,9 @@ def run_recoverable_workflow(
         checkpoint_dir = os.path.join(os.getcwd(), "workflow_checkpoints")
         os.makedirs(checkpoint_dir, exist_ok=True)
     
-    # Create a unique workflow ID
-    workflow_id = f"workflow_{int(time.time())}_{workflow_name}"
-    
-    # Check for existing checkpoint
-    checkpoint_file = os.path.join(checkpoint_dir, f"{workflow_id}.checkpoint")
-    
+    # Checkpoint functionality to be implemented in future versions
     # For now redirect to standard workflow
+    # Note: workflow_id generation moved into run_workflow function
     return run_workflow(
         workflow_name, agents, config, document_path, context, with_recovery=True
     )

@@ -14,10 +14,14 @@ import threading
 import os
 import psutil
 import json
-from typing import Any, Dict, List, Optional, Tuple, Callable
+import traceback
+from typing import TypeVar, Callable, Dict, Any, Optional, List, Tuple
 from enum import Enum
 from functools import wraps
 from dataclasses import dataclass, field
+
+# Define TypeVar for function decorators
+F = TypeVar('F', bound=Callable[..., Any])
 
 
 # -----------------------------------------------------------------------------
@@ -1367,7 +1371,7 @@ def initialize_metrics() -> None:
     # Get instances to ensure they're initialized
     registry = MetricsRegistry.get_instance()
     system_collector = SystemMetricsCollector.get_instance()
-    app_collector = AppMetricsCollector.get_instance()
+    AppMetricsCollector.get_instance()  # Initialize but don't store reference
     health_system = HealthCheckSystem.get_instance()
     
     # Register a basic system health check

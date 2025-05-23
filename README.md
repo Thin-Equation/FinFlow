@@ -40,6 +40,13 @@ The FinFlow system features a robust Agent Communication Framework that provides
 
 For more details, see [Agent Communication Framework](docs/agent_communication_framework.md).
 
+## Development
+
+For comprehensive setup instructions and development guidelines, see:
+- [Development Setup Guide](docs/development_setup.md)
+- [Agent Architecture](docs/agent_architecture.md)
+- [Optimization Guide](docs/optimization_guide.md)
+
 ### Storage Agent
 The StorageAgent is responsible for all database operations in the FinFlow system. It provides:
 
@@ -133,6 +140,60 @@ pip install -r requirements.txt
 export FINFLOW_ENV=development
 # Optionally create a .env file with your configuration settings
 ```
+
+### Dependency Management
+The project includes several tools for dependency management:
+
+#### Quick Setup
+
+For new developers, the easiest way to set up the environment is with our setup script:
+
+```bash
+# Setup and validate all dependencies at once
+./setup_dependencies.sh
+```
+
+This script will:
+- Check your Python version
+- Create or activate a virtual environment
+- Install all dependencies
+- Verify dependencies match project requirements
+- Create a frozen requirements file for reproducible builds
+
+#### Advanced Options
+
+For more granular dependency management, use the Makefile targets:
+
+```bash
+# Install dependencies
+make install
+
+# Check if all dependencies are properly listed in requirements.txt
+make check-deps
+
+# Update dependencies to latest compatible versions
+make update-deps
+```
+
+#### Adding New Dependencies
+
+When adding new dependencies to the project:
+1. Add them to requirements.txt with appropriate version constraints
+2. Run `make check-deps` to verify all imports are properly documented
+3. Consider updating the frozen requirements for reproducibility
+
+#### Checking For Updates
+
+To check for outdated dependencies and get recommended updates:
+
+```bash
+# Show outdated dependencies and safety analysis
+make outdated-deps
+# or directly
+./scripts/check_outdated_deps.py
+```
+
+This tool analyzes your dependencies against semantic versioning constraints and suggests safe updates.
 
 ## Running the System
 Use the provided script to run the ADK CLI:

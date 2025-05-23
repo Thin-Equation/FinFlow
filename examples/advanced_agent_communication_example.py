@@ -277,8 +277,8 @@ class MasterOrchestrator:
         
         context["workflow_id"] = workflow_id
         
-        # Initialize communication protocol
-        comms = CommunicationProtocol(context, self.name)
+        # Initialize communication protocol (will be used in future implementation)
+        # comms = CommunicationProtocol(context, self.name)
         
         # Initialize task framework
         tasks = TaskExecutionFramework(context, self.name)

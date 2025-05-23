@@ -45,7 +45,7 @@ class TestAgentCommunication(unittest.TestCase):
         
         # Send a message
         content = {"action": "get_data", "data": {"entity": "customer"}}
-        sent_message = send_message(
+        send_message(
             context, sender_id, recipient_id, 
             MESSAGE_TYPE_REQUEST, content
         )
@@ -78,7 +78,7 @@ class TestAgentCommunication(unittest.TestCase):
             "data": {"customer": {"id": "123", "name": "John"}}
         }
         
-        response_message = send_message(
+        send_message(
             context, recipient_id, sender_id,
             MESSAGE_TYPE_RESPONSE, response_content,
             reference_id=message_id

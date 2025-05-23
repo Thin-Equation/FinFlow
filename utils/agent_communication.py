@@ -18,7 +18,7 @@ from google.adk.tools.agent_tool import AgentTool # type: ignore
 from utils.session_state import get_or_create_session_state
 from utils.agent_protocol import (
     MessageType, StatusCode, PriorityLevel,
-    create_protocol_message, create_response
+    create_protocol_message
 )
 
 # For improved typing
@@ -394,7 +394,8 @@ def mark_message_read(
         # Update the session state in the context
         context["session_state"] = session_state.to_dict()
 
-def create_response(
+# Using a different name to avoid redefinition
+def generate_response(
     context: Dict[str, Any],
     original_message: Dict[str, Any],
     content: Dict[str, Any],
@@ -796,7 +797,7 @@ def find_suitable_agent(
     # Extract required capabilities from delegation request
     required_capabilities = delegation_request.get("required_capabilities", [])
     task_description = delegation_request.get("task_description", "")
-    task_priority = delegation_request.get("priority", PriorityLevel.NORMAL)
+    # Priority will be used in future implementation
     
     # Dictionary to track capability matches for each agent
     agent_matches = {}
@@ -1621,7 +1622,7 @@ def apply_delegation_strategy(
     elif strategy_value == DelegationStrategy.LEARNING_BASED.value:
         # Learning-based: use historical task-agent matching data
         required_capabilities = delegation_request.get("required_capabilities", [])
-        task_description = delegation_request.get("task_description", "")
+        # Task description isn't used in current implementation
         
         # Get historical delegation data
         delegation_history = session_state.get("delegation_history", [])

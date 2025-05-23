@@ -7,6 +7,7 @@ with enhanced metrics collection, health monitoring, and batch processing endpoi
 
 import logging
 import os
+import time
 from typing import Dict, Any, Optional
 from datetime import datetime
 import json
@@ -20,7 +21,7 @@ from pydantic import BaseModel, Field
 # Import enhanced utilities
 from utils.health_check import HealthCheckManager, HealthStatus
 from utils.metrics import AppMetricsCollector, MetricPoint, MetricType
-from utils.recovery_manager import RecoveryManager
+# RecoveryManager will be imported when needed
 
 # Import the optimized batch processor
 from batch.optimized_batch import OptimizedBatchProcessor
@@ -96,7 +97,7 @@ def create_app(agents: Dict[str, Any], config: Dict[str, Any]) -> FastAPI:
     # Initialize core components
     metrics_collector = AppMetricsCollector.get_instance()
     health_manager = HealthCheckManager.get_instance(config.get("health_check", {}))
-    recovery_manager = RecoveryManager()
+    # Recovery manager will be initialized when needed
     batch_processor = OptimizedBatchProcessor()
     
     # Start health check system
