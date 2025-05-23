@@ -120,7 +120,7 @@ docker-compose up -d
 ### Installation
 1. Clone this repository
 ```bash
-git clone https://github.com/yourusername/finflow.git
+git clone https://github.com/Thin-Equation/finflow.git
 cd finflow
 ```
 
@@ -220,9 +220,6 @@ For more comprehensive testing options:
 ```bash
 # Run tests with pytest
 pytest
-
-# Run Hello World agent test
-pytest tests/test_hello_world_agent.py -v
 
 # Generate test coverage report
 pytest --cov=agents --cov-report=html
