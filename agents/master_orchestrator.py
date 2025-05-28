@@ -70,29 +70,54 @@ class MasterOrchestratorAgent(BaseAgent):
             temperature=0.2,
         )
         
-        # Initialize worker agents dictionary with capabilities
-        self.worker_agents = {
+        # Initialize worker agents dictionary with capabilities using __dict__
+        self.__dict__["worker_agents"] = {
             "document_processor": document_processor,
             "validation_agent": validation_agent,
             "storage_agent": storage_agent,
             "analytics_agent": analytics_agent,
         }
         
-        # Define agent capabilities
-        self.agent_capabilities = {
+        # Define agent capabilities using __dict__
+        self.__dict__["agent_capabilities"] = {
             "document_processor": ["document_processing", "information_extraction", "document_classification"],
             "validation_agent": ["validation", "rule_checking", "compliance_verification"],
             "storage_agent": ["data_storage", "persistence", "retrieval"],
             "analytics_agent": ["data_analysis", "reporting", "visualization"],
         }
         
-        # Set up logger
-        self.logger = logging.getLogger(f"finflow.agents.{self.name}")
+        # Set up logger using __dict__
+        self.__dict__["logger"] = logging.getLogger(f"finflow.agents.{self.name}")
         
-        # Initialize communication framework components
-        self.comms_protocol = None  # Will be initialized during processing
-        self.task_framework = None  # Will be initialized during processing
+        # Initialize communication framework components using __dict__
+        self.__dict__["comms_protocol"] = None  # Will be initialized during processing
+        self.__dict__["task_framework"] = None  # Will be initialized during processing
     
+    @property
+    def worker_agents(self) -> Dict[str, Any]:
+        """Access worker agents."""
+        return self.__dict__.get("worker_agents", {})
+    
+    @property
+    def agent_capabilities(self) -> Dict[str, Any]:
+        """Access agent capabilities."""
+        return self.__dict__.get("agent_capabilities", {})
+    
+    @property
+    def logger(self) -> logging.Logger:
+        """Access the logger."""
+        return self.__dict__.get("logger")
+    
+    @property
+    def comms_protocol(self) -> Any:
+        """Access the communications protocol."""
+        return self.__dict__.get("comms_protocol")
+    
+    @property
+    def task_framework(self) -> Any:
+        """Access the task framework."""
+        return self.__dict__.get("task_framework")
+
     def register_worker_agents(self) -> None:
         """
         Register available worker agents as tools.

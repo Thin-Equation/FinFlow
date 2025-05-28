@@ -30,7 +30,7 @@ from utils.metrics import (
 from utils.error_handling import (
     retry
 )
-from utils.recovery_manager import (
+from utils.recovery import (
     RecoveryManager
 )
 

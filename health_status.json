@@ -1,0 +1,61 @@
+{
+  "timestamp": "2025-05-28T10:19:34.416796",
+  "status": "healthy",
+  "checks": {
+    "system.cpu": {
+      "name": "system.cpu",
+      "status": "healthy",
+      "response_time_ms": 1002.97,
+      "timestamp": 1748441974.4159842,
+      "critical": false,
+      "cpu_percent": 9.9,
+      "cpu_count": 11,
+      "load_avg": [
+        2.845703125,
+        3.015625,
+        2.90478515625
+      ]
+    },
+    "system.memory": {
+      "name": "system.memory",
+      "status": "healthy",
+      "response_time_ms": 0.11,
+      "timestamp": 1748441973.413375,
+      "critical": false,
+      "memory_percent": 66.6,
+      "memory_available_mb": 6149.6875,
+      "memory_total_mb": 18432.0
+    },
+    "system.disk": {
+      "name": "system.disk",
+      "status": "healthy",
+      "response_time_ms": 0.57,
+      "timestamp": 1748441973.41428,
+      "critical": true,
+      "disk_percent": 16.9,
+      "disk_free_gb": 367.54501724243164,
+      "disk_total_gb": 460.4317207336426,
+      "path": "/Users/dhairyagundechia/Downloads/finflow"
+    },
+    "system.python_runtime": {
+      "name": "system.python_runtime",
+      "status": "healthy",
+      "response_time_ms": 0.01,
+      "timestamp": 1748441973.413655,
+      "critical": false,
+      "python_version": "3.13.3 (main, Apr  9 2025, 03:47:57) [Clang 20.1.0 ]",
+      "python_implementation": "cpython",
+      "executable": "/Users/dhairyagundechia/Downloads/finflow/finflow-env/bin/python"
+    },
+    "system.network": {
+      "name": "system.network",
+      "status": "healthy",
+      "response_time_ms": 28.88,
+      "timestamp": 1748441973.442975,
+      "critical": true,
+      "connected": true,
+      "connect_time_ms": 28.84,
+      "host": "google.com"
+    }
+  }
+}

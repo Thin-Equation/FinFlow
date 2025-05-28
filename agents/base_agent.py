@@ -86,8 +86,8 @@ class BaseAgent(LlmAgent):
             # Temperature is not directly supported in the constructor
         )
         
-        # Get logger from __dict__
-        logger = self.__dict__.get("logger")
+        # Use the logger that was already created and stored
+        # Don't overwrite it by getting from __dict__
         
         # Define a direct implementation of add_tool since parent doesn't have it
         def add_tool_impl(tool: BaseTool) -> None:

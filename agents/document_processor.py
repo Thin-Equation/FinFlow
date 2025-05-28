@@ -45,21 +45,21 @@ class DocumentProcessorAgent(BaseAgent):
             temperature=0.1,
         )
         
-        # Initialize logger
-        self.logger = logging.getLogger(f"finflow.agents.{self.name}")
+        # Initialize logger using __dict__ to avoid Pydantic validation
+        self.__dict__["logger"] = logging.getLogger(f"finflow.agents.{self.name}")
         
         # Load configuration - first from file, then override with provided config
-        self.config = self._load_config()
+        self.__dict__["config"] = self._load_config()
         if config:
             # Update with provided config (deep merge)
-            self._update_config_recursive(self.config, config)
+            self._update_config_recursive(self.__dict__["config"], config)
         
         # Initialize processing and classification components
         self._init_components()
         
-        # Tracking for batch operations
-        self.active_batches = {}
-        self.metrics = {
+        # Tracking for batch operations using __dict__
+        self.__dict__["active_batches"] = {}
+        self.__dict__["metrics"] = {
             "documents_processed": 0,
             "successful_extractions": 0,
             "failed_extractions": 0,
@@ -70,6 +70,41 @@ class DocumentProcessorAgent(BaseAgent):
         # Register tools
         self.register_tools()
     
+    @property
+    def config(self) -> Dict[str, Any]:
+        """Access the configuration."""
+        return self.__dict__.get("config", {})
+    
+    @property
+    def logger(self) -> logging.Logger:
+        """Access the logger."""
+        return self.__dict__.get("logger")
+    
+    @property
+    def active_batches(self) -> Dict[str, Any]:
+        """Access active batches."""
+        return self.__dict__.get("active_batches", {})
+    
+    @property
+    def metrics(self) -> Dict[str, Any]:
+        """Access metrics."""
+        return self.__dict__.get("metrics", {})
+    
+    @property
+    def document_processor(self) -> Any:
+        """Access the document processor."""
+        return self.__dict__.get("document_processor")
+    
+    @property
+    def ingestion_manager(self) -> Any:
+        """Access the ingestion manager."""
+        return self.__dict__.get("ingestion_manager")
+    
+    @property
+    def document_classifier(self) -> Any:
+        """Access the document classifier."""
+        return self.__dict__.get("document_classifier")
+
     def _load_config(self) -> Dict[str, Any]:
         """Load document processor configuration."""
         try:
@@ -167,29 +202,29 @@ class DocumentProcessorAgent(BaseAgent):
                 "gcs_bucket": self.config.get("gcs_bucket")
             }
             
-            self.document_processor = create_processor_instance(processor_config)
+            self.__dict__["document_processor"] = create_processor_instance(processor_config)
             
             # Create document ingestion manager
-            self.ingestion_manager = DocumentIngestionManager(
+            self.__dict__["ingestion_manager"] = DocumentIngestionManager(
                 max_workers=self.config.get("max_parallel_workers", 5),
                 enable_cache=self.config.get("document_cache_enabled", True)
             )
             
             # Create document classifier if enabled
             if self.config["classification"]["enabled"]:
-                self.document_classifier = DocumentClassifier(
+                self.__dict__["document_classifier"] = DocumentClassifier(
                     confidence_threshold=self.config["classification"]["confidence_threshold"]
                 )
             else:
-                self.document_classifier = None
+                self.__dict__["document_classifier"] = None
                 
             self.logger.info("Document processing components initialized successfully")
             
         except ImportError as e:
             self.logger.warning(f"Could not initialize enhanced components: {e}. Using basic functionality.")
-            self.document_processor = None
-            self.ingestion_manager = None
-            self.document_classifier = None
+            self.__dict__["document_processor"] = None
+            self.__dict__["ingestion_manager"] = None
+            self.__dict__["document_classifier"] = None
     
     def _register_document_ai_tool(self):
         """Register Document AI tool."""

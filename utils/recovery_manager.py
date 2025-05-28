@@ -284,7 +284,7 @@ class RecoveryManager:
         if deleted_count > 0:
             self.logger.info(f"Cleaned up {deleted_count} expired checkpoints")
     
-    @time_function(name="create_checkpoint", metric_type=MetricType.TIMER)
+    @time_function("create_checkpoint")
     def create_checkpoint(
         self, 
         workflow_id: str, 
@@ -363,7 +363,7 @@ class RecoveryManager:
             self.logger.error(f"Error loading checkpoint: {e}")
             return None
     
-    @time_function(name="create_recovery_plan", metric_type=MetricType.TIMER)
+    @time_function("create_recovery_plan")
     def create_recovery_plan(
         self,
         entity_id: str,
@@ -428,7 +428,7 @@ class RecoveryManager:
         with open(file_path, 'w') as f:
             json.dump(plan.to_dict(), f)
     
-    @time_function(name="execute_recovery", metric_type=MetricType.TIMER)
+    @time_function("execute_recovery")
     def execute_recovery(
         self, 
         recovery_id: str,

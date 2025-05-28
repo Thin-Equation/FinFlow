@@ -479,6 +479,26 @@ class HealthCheckManager:
         
         return status
     
+    def get_full_report(self) -> Dict[str, Any]:
+        """Get a full health report including all check details.
+        
+        Returns:
+            Dict[str, Any]: Full health report
+        """
+        return self.get_health_status()
+    
+    def run_all_checks(self) -> None:
+        """Run all health checks immediately."""
+        for check in self.checks.values():
+            try:
+                result = check.run_check()
+                self._update_check_metrics(result)
+            except Exception as e:
+                self.logger.error(f"Error running health check {check.name}: {e}")
+        
+        # Update overall health
+        self._calculate_overall_health()
+    
     def run_check(self, name: str) -> Dict[str, Any]:
         """Run a specific health check on demand.
         

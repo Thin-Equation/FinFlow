@@ -142,6 +142,19 @@ class Counter(BaseMetric):
             self._value += amount
             return self.create_point(self._value, labels)
     
+    def increment(self, value: float = 1.0, labels: Dict[str, str] = None) -> MetricPoint:
+        """
+        Increment the counter (alias for inc()).
+        
+        Args:
+            value: Amount to increment by
+            labels: Additional labels for this increment
+            
+        Returns:
+            A MetricPoint with the new value
+        """
+        return self.inc(value, labels)
+    
     def get_value(self) -> float:
         """Get the current value."""
         with self._lock:
@@ -857,565 +870,362 @@ class AppMetricsCollector:
             error_type: Type of error
         """
         self.agent_error_count.inc(labels={"agent": agent_name, "type": error_type})
-
-
-# -----------------------------------------------------------------------------
-# Health Check System
-# -----------------------------------------------------------------------------
-
-class HealthStatus(Enum):
-    """Health status of a component."""
-    UNKNOWN = "unknown"
-    HEALTHY = "healthy"
-    DEGRADED = "degraded"
-    UNHEALTHY = "unhealthy"
-
-
-@dataclass
-class HealthCheckResult:
-    """Result of a health check."""
-    component: str
-    status: HealthStatus
-    details: Dict[str, Any] = field(default_factory=dict)
-    timestamp: float = field(default_factory=time.time)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "component": self.component,
-            "status": self.status.value,
-            "details": self.details,
-            "timestamp": self.timestamp
-        }
-
-
-class HealthCheck:
-    """Base class for health checks."""
-    
-    def __init__(self, component: str, description: str = ""):
+        
+    def record(self, metric_point: MetricPoint) -> None:
         """
-        Initialize a health check.
+        Record a metric point.
         
         Args:
-            component: Component name
-            description: Health check description
+            metric_point: The metric point to record
         """
-        self.component = component
-        self.description = description
-        self.logger = logging.getLogger(f"finflow.health.{component}")
-    
-    def check(self) -> HealthCheckResult:
-        """Perform the health check."""
-        raise NotImplementedError("Subclasses must implement this method")
-
-
-class HealthCheckSystem:
-    """System for managing health checks."""
-    
-    _instance: Optional['HealthCheckSystem'] = None
-    _lock = threading.Lock()
-    
-    @classmethod
-    def get_instance(cls) -> 'HealthCheckSystem':
-        """Get singleton instance."""
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls()
-        return cls._instance
-    
-    def __init__(self):
-        """Initialize the health check system."""
-        if self.__class__._instance is not None:
-            raise RuntimeError("This class is a singleton. Use get_instance() instead.")
-            
-        self.health_checks: Dict[str, HealthCheck] = {}
-        self.results: Dict[str, HealthCheckResult] = {}
+        # Delegate to the registry for recording
+        self.registry.record_metric(metric_point)
         
-        self.logger = logging.getLogger("finflow.health")
+        # Also update the appropriate internal metric if it exists
+        metric_name = metric_point.name
+        labels = metric_point.labels or {}
         
-        # For periodic health checking
-        self.check_interval = 60.0  # seconds
-        self._check_thread = None
+        # Map common metric names to internal metrics
+        if metric_name == "http_requests_total":
+            if metric_point.metric_type == MetricType.COUNTER:
+                endpoint = labels.get("path", "unknown")
+                self.request_count.inc(labels={"endpoint": endpoint})
+        elif metric_name == "http_response_time_ms":
+            if metric_point.metric_type == MetricType.HISTOGRAM:
+                # Convert milliseconds to seconds for our timer
+                duration_seconds = metric_point.value / 1000.0
+                endpoint = labels.get("path", "unknown")
+                # Record the timing directly to the histogram
+                self.request_duration.histogram.observe(duration_seconds, {"endpoint": endpoint})
+        elif metric_name == "http_errors_total":
+            if metric_point.metric_type == MetricType.COUNTER:
+                error_type = labels.get("error", "unknown")
+                self.error_count.inc(labels={"type": error_type, "code": "500"})
     
-    def register_check(self, check: HealthCheck) -> None:
+    def histogram(self, name: str, value: float, labels: Dict[str, str] = None) -> None:
         """
-        Register a health check.
+        Record a histogram value.
         
         Args:
-            check: The health check to register
+            name: Metric name
+            value: Value to record
+            labels: Additional labels
         """
-        self.health_checks[check.component] = check
-        self.logger.info(f"Registered health check for {check.component}")
-    
-    def unregister_check(self, component: str) -> None:
-        """
-        Unregister a health check.
-        
-        Args:
-            component: Component name of the check to unregister
-        """
-        if component in self.health_checks:
-            del self.health_checks[component]
-            if component in self.results:
-                del self.results[component]
-            self.logger.info(f"Unregistered health check for {component}")
-    
-    def run_check(self, component: str) -> HealthCheckResult:
-        """
-        Run a specific health check.
-        
-        Args:
-            component: Component to check
-            
-        Returns:
-            Health check result
-            
-        Raises:
-            KeyError: If the component is not registered
-        """
-        check = self.health_checks[component]
-        try:
-            result = check.check()
-            self.results[component] = result
-            return result
-        except Exception as e:
-            self.logger.error(f"Health check for {component} failed: {e}")
-            result = HealthCheckResult(
-                component=component,
-                status=HealthStatus.UNHEALTHY,
-                details={"error": str(e), "traceback": traceback.format_exc()}
-            )
-            self.results[component] = result
-            return result
-    
-    def run_all_checks(self) -> Dict[str, HealthCheckResult]:
-        """
-        Run all registered health checks.
-        
-        Returns:
-            Dictionary of health check results
-        """
-        for component in self.health_checks:
-            self.run_check(component)
-            
-        return self.results
-    
-    def get_system_status(self) -> Tuple[HealthStatus, Dict[str, HealthCheckResult]]:
-        """
-        Get overall system health status.
-        
-        Returns:
-            Tuple of (overall status, individual check results)
-        """
-        # Run all checks to make sure we have fresh results
-        self.run_all_checks()
-        
-        # Determine overall status
-        if not self.results:
-            return HealthStatus.UNKNOWN, {}
-            
-        has_unhealthy = any(r.status == HealthStatus.UNHEALTHY for r in self.results.values())
-        has_degraded = any(r.status == HealthStatus.DEGRADED for r in self.results.values())
-        
-        if has_unhealthy:
-            overall = HealthStatus.UNHEALTHY
-        elif has_degraded:
-            overall = HealthStatus.DEGRADED
+        # Try to find an existing histogram metric
+        metric = self.registry.get_metric(name)
+        if metric and hasattr(metric, 'observe'):
+            metric.observe(value, labels)
         else:
-            overall = HealthStatus.HEALTHY
-            
-        return overall, self.results
+            # Create a new histogram if it doesn't exist
+            histogram = self.registry.create_histogram(name, f"Histogram for {name}", labels)
+            histogram.observe(value, labels)
     
-    def get_health_report(self) -> Dict[str, Any]:
+    def gauge(self, name: str):
         """
-        Get a health report.
+        Get or create a gauge metric.
+        
+        Args:
+            name: Metric name
+            
+        Returns:
+            Gauge metric object
+        """
+        # Try to find an existing gauge metric
+        metric = self.registry.get_metric(name)
+        if metric and hasattr(metric, 'set'):
+            return metric
+        else:
+            # Create a new gauge if it doesn't exist
+            return self.registry.create_gauge(name, f"Gauge for {name}")
+    
+    def counter(self, name: str):
+        """
+        Get or create a counter metric.
+        
+        Args:
+            name: Metric name
+            
+        Returns:
+            Counter metric object
+        """
+        # Try to find an existing counter metric
+        metric = self.registry.get_metric(name)
+        if metric and hasattr(metric, 'inc'):
+            return metric
+        else:
+            # Create a new counter if it doesn't exist
+            return self.registry.create_counter(name, f"Counter for {name}")
+    
+    def export_prometheus(self) -> str:
+        """
+        Export metrics in Prometheus format.
         
         Returns:
-            Dictionary with health status information
+            Prometheus formatted metrics string
         """
-        overall, results = self.get_system_status()
-        
-        return {
-            "status": overall.value,
-            "timestamp": time.time(),
-            "components": {
-                component: result.to_dict()
-                for component, result in results.items()
-            }
-        }
-    
-    def start_checking(self, interval: float = 60.0) -> None:
-        """
-        Start periodic health checking in a background thread.
-        
-        Args:
-            interval: Check interval in seconds
-        """
-        if self._check_thread is not None and self._check_thread.is_alive():
-            self.logger.warning("Health check thread already running")
-            return
-            
-        self.check_interval = interval
-        
-        def check_loop() -> None:
-            """Background thread function for periodic health checking."""
-            while True:
-                try:
-                    self.run_all_checks()
-                except Exception as e:
-                    self.logger.error(f"Error in health checking: {e}")
-                
-                time.sleep(self.check_interval)
-        
-        self._check_thread = threading.Thread(
-            target=check_loop, 
-            name="health-checker",
-            daemon=True
-        )
-        self._check_thread.start()
-        self.logger.info(f"Started health checking with {interval}s interval")
-
-
-# -----------------------------------------------------------------------------
-# Common Health Checks
-# -----------------------------------------------------------------------------
-
-class SystemResourcesCheck(HealthCheck):
-    """Check system resources like CPU and memory."""
-    
-    def __init__(self, 
-                 cpu_threshold: float = 90.0, 
-                 memory_threshold: float = 90.0,
-                 disk_threshold: float = 90.0):
-        """
-        Initialize the system resources check.
-        
-        Args:
-            cpu_threshold: CPU usage percentage threshold for degraded status
-            memory_threshold: Memory usage percentage threshold for degraded status
-            disk_threshold: Disk usage percentage threshold for degraded status
-        """
-        super().__init__("system_resources", "System resource usage check")
-        self.cpu_threshold = cpu_threshold
-        self.memory_threshold = memory_threshold
-        self.disk_threshold = disk_threshold
-    
-    def check(self) -> HealthCheckResult:
-        """Perform the health check."""
         try:
-            # Get system metrics
-            cpu_percent = psutil.cpu_percent(interval=0.5)
-            memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            lines = []
             
-            details = {
-                "cpu_usage_percent": cpu_percent,
-                "memory_usage_percent": memory.percent,
-                "disk_usage_percent": disk.percent
-            }
-            
-            # Determine status
-            status = HealthStatus.HEALTHY
-            
-            if (cpu_percent > self.cpu_threshold or 
-                memory.percent > self.memory_threshold or 
-                disk.percent > self.disk_threshold):
-                status = HealthStatus.DEGRADED
+            # Get all metrics from registry
+            for metric_name, metric in self.registry.metrics.items():
+                # Add metric help
+                lines.append(f"# HELP {metric_name} {metric.description}")
+                lines.append(f"# TYPE {metric_name} {metric.get_type().value}")
                 
-                # Add specific warnings
-                warnings = []
-                if cpu_percent > self.cpu_threshold:
-                    warnings.append(f"CPU usage ({cpu_percent}%) exceeds threshold ({self.cpu_threshold}%)")
-                if memory.percent > self.memory_threshold:
-                    warnings.append(f"Memory usage ({memory.percent}%) exceeds threshold ({self.memory_threshold}%)")
-                if disk.percent > self.disk_threshold:
-                    warnings.append(f"Disk usage ({disk.percent}%) exceeds threshold ({self.disk_threshold}%)")
-                    
-                details["warnings"] = warnings
-            
-            return HealthCheckResult(
-                component=self.component,
-                status=status,
-                details=details
-            )
-            
+                # Get current value based on metric type
+                if hasattr(metric, 'get_value'):
+                    value = metric.get_value()
+                    labels_str = ",".join(f'{k}="{v}"' for k, v in metric.default_labels.items())
+                    labels_part = f"{{{labels_str}}}" if labels_str else ""
+                    lines.append(f"{metric_name}{labels_part} {value}")
+                
+            return "\n".join(lines)
         except Exception as e:
-            self.logger.error(f"System resources check failed: {e}")
-            return HealthCheckResult(
-                component=self.component,
-                status=HealthStatus.UNHEALTHY,
-                details={"error": str(e)}
-            )
-
-
-class DatabaseHealthCheck(HealthCheck):
-    """Check database connectivity and performance."""
+            self.logger.error(f"Error exporting Prometheus metrics: {e}")
+            return "# Error exporting metrics\n"
     
-    def __init__(self, db_connection_func: Callable[[], Any]):
+    def export_json(self) -> str:
         """
-        Initialize the database health check.
+        Export metrics in JSON format.
         
-        Args:
-            db_connection_func: Function that returns a database connection
+        Returns:
+            JSON formatted metrics string
         """
-        super().__init__("database", "Database connectivity check")
-        self.db_connection_func = db_connection_func
-    
-    def check(self) -> HealthCheckResult:
-        """Perform the health check."""
         try:
-            # Measure connection time
-            start_time = time.time()
-            conn = self.db_connection_func()
-            connection_time = time.time() - start_time
+            metrics_data = []
             
-            # Perform a simple query to ensure the connection works
-            cursor = conn.cursor()
-            
-            query_start_time = time.time()
-            cursor.execute("SELECT 1")
-            query_time = time.time() - query_start_time
-            
-            cursor.close()
-            
-            # Check for slow responses
-            status = HealthStatus.HEALTHY
-            details = {
-                "connection_time": connection_time,
-                "query_time": query_time
-            }
-            
-            # If connection or query is slow, mark as degraded
-            if connection_time > 1.0 or query_time > 0.5:
-                status = HealthStatus.DEGRADED
-                details["warnings"] = []
-                
-                if connection_time > 1.0:
-                    details["warnings"].append(f"Slow database connection: {connection_time:.2f}s")
-                    
-                if query_time > 0.5:
-                    details["warnings"].append(f"Slow database query: {query_time:.2f}s")
-            
-            return HealthCheckResult(
-                component=self.component,
-                status=status,
-                details=details
-            )
-            
-        except Exception as e:
-            self.logger.error(f"Database health check failed: {e}")
-            return HealthCheckResult(
-                component=self.component,
-                status=HealthStatus.UNHEALTHY,
-                details={"error": str(e)}
-            )
-
-
-class ExternalServiceCheck(HealthCheck):
-    """Check connectivity to an external service."""
-    
-    def __init__(self, service_name: str, check_func: Callable[[], bool]):
-        """
-        Initialize the external service check.
-        
-        Args:
-            service_name: Name of the service
-            check_func: Function that returns True if service is available
-        """
-        super().__init__(f"external_service_{service_name}", f"External service: {service_name}")
-        self.service_name = service_name
-        self.check_func = check_func
-    
-    def check(self) -> HealthCheckResult:
-        """Perform the health check."""
-        try:
-            # Measure response time
-            start_time = time.time()
-            available = self.check_func()
-            response_time = time.time() - start_time
-            
-            if available:
-                status = HealthStatus.HEALTHY
-                details = {
-                    "response_time": response_time
+            # Get all metrics from registry  
+            for metric_name, metric in self.registry.metrics.items():
+                metric_info = {
+                    "name": metric_name,
+                    "description": metric.description,
+                    "type": metric.get_type().value,
+                    "labels": metric.default_labels
                 }
                 
-                # If service is slow, mark as degraded
-                if response_time > 2.0:
-                    status = HealthStatus.DEGRADED
-                    details["warnings"] = [f"Slow service response: {response_time:.2f}s"]
-            else:
-                status = HealthStatus.UNHEALTHY
-                details = {
-                    "error": "Service is unavailable"
-                }
+                # Get current value based on metric type
+                if hasattr(metric, 'get_value'):
+                    metric_info["value"] = metric.get_value()
+                
+                metrics_data.append(metric_info)
             
-            return HealthCheckResult(
-                component=self.component,
-                status=status,
-                details=details
-            )
-            
+            return json.dumps(metrics_data, indent=2)
         except Exception as e:
-            self.logger.error(f"External service check for {self.service_name} failed: {e}")
-            return HealthCheckResult(
-                component=self.component,
-                status=HealthStatus.UNHEALTHY,
-                details={"error": str(e)}
-            )
+            self.logger.error(f"Error exporting JSON metrics: {e}")
+            return json.dumps({"error": "Error exporting metrics"})
 
 
 # -----------------------------------------------------------------------------
-# API and Decorators
+# Metric Decorators
 # -----------------------------------------------------------------------------
 
-def time_function(metric_name: str, labels: Optional[Dict[str, str]] = None) -> Callable[[F], F]:
+def time_function(
+    name: Optional[str] = None,
+    metric_type: MetricType = MetricType.TIMER,
+    labels: Optional[Dict[str, str]] = None,
+    include_args: bool = False
+) -> Callable[[F], F]:
     """
-    Decorator to time a function execution.
+    Decorator to time function execution and record metrics.
     
     Args:
-        metric_name: Name of the timer metric
-        labels: Additional labels for the metric
+        name: Name of the metric (defaults to function name)
+        metric_type: Type of metric to record (defaults to TIMER)
+        labels: Default labels to apply to metrics
+        include_args: Whether to include function arguments in labels
         
     Returns:
-        Decorated function
+        Decorated function that records timing metrics
     """
     def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            registry = MetricsRegistry.get_instance()
-            timer = registry.get_metric(metric_name)
+        def wrapper(*args, **kwargs) -> Any:
+            # Get metrics collector
+            app_metrics = AppMetricsCollector.get_instance()
             
-            # Create timer if it doesn't exist
-            if timer is None or not isinstance(timer, Timer):
-                timer = registry.create_timer(metric_name)
+            # Generate metric name
+            metric_name = name or f"{func.__module__}.{func.__name__}"
             
-            # Time the function
-            with timer.time().with_labels(labels or {}):
-                return func(*args, **kwargs)
+            # Prepare labels
+            metric_labels = dict(labels or {})
+            metric_labels["function"] = func.__name__
+            metric_labels["module"] = func.__module__
+            
+            if include_args and args:
+                # Add first argument as context if it's a string
+                if args and isinstance(args[0], str):
+                    metric_labels["context"] = str(args[0])[:50]  # Truncate to avoid long labels
+            
+            # Start timing
+            start_time = time.time()
+            error_occurred = False
+            error_type = "none"
+            
+            try:
+                # Execute function
+                result = func(*args, **kwargs)
+                return result
+            except Exception as e:
+                error_occurred = True
+                error_type = type(e).__name__
+                raise
+            finally:
+                # Record timing metric
+                elapsed_time = time.time() - start_time
                 
+                # Add status labels
+                metric_labels["status"] = "error" if error_occurred else "success"
+                metric_labels["error_type"] = error_type
+                
+                # Record the metric
+                if metric_type == MetricType.TIMER:
+                    # Record as timer metric
+                    metric_point = MetricPoint(
+                        name=f"{metric_name}_duration",
+                        value=elapsed_time,
+                        labels=metric_labels,
+                        metric_type=MetricType.HISTOGRAM
+                    )
+                    app_metrics.record(metric_point)
+                    
+                    # Also record count
+                    count_point = MetricPoint(
+                        name=f"{metric_name}_count",
+                        value=1.0,
+                        labels=metric_labels,
+                        metric_type=MetricType.COUNTER
+                    )
+                    app_metrics.record(count_point)
+                
+                elif metric_type == MetricType.COUNTER:
+                    # Record as counter
+                    metric_point = MetricPoint(
+                        name=metric_name,
+                        value=1.0,
+                        labels=metric_labels,
+                        metric_type=MetricType.COUNTER
+                    )
+                    app_metrics.record(metric_point)
+        
         return wrapper  # type: ignore
-    
     return decorator
 
 
-def count_invocations(metric_name: str, labels: Optional[Dict[str, str]] = None) -> Callable[[F], F]:
+def count_invocations(
+    name: Optional[str] = None,
+    labels: Optional[Dict[str, str]] = None
+) -> Callable[[F], F]:
     """
     Decorator to count function invocations.
     
     Args:
-        metric_name: Name of the counter metric
-        labels: Additional labels for the metric
+        name: Name of the metric (defaults to function name)
+        labels: Default labels to apply to metrics
         
     Returns:
-        Decorated function
+        Decorated function that records invocation counts
     """
     def decorator(func: F) -> F:
         @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            registry = MetricsRegistry.get_instance()
-            counter = registry.get_metric(metric_name)
+        def wrapper(*args, **kwargs) -> Any:
+            # Get metrics collector
+            app_metrics = AppMetricsCollector.get_instance()
             
-            # Create counter if it doesn't exist
-            if counter is None or not isinstance(counter, Counter):
-                counter = registry.create_counter(metric_name)
+            # Generate metric name
+            metric_name = name or f"{func.__module__}.{func.__name__}_invocations"
             
-            # Increment counter
-            counter.inc(labels=labels)
+            # Prepare labels
+            metric_labels = dict(labels or {})
+            metric_labels["function"] = func.__name__
+            metric_labels["module"] = func.__module__
             
-            return func(*args, **kwargs)
-                
-        return wrapper  # type: ignore
-    
-    return decorator
-
-
-def track_errors(metric_name: str, labels: Optional[Dict[str, str]] = None) -> Callable[[F], F]:
-    """
-    Decorator to track errors in a function.
-    
-    Args:
-        metric_name: Name of the counter metric
-        labels: Additional labels for the metric
-        
-    Returns:
-        Decorated function
-    """
-    def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            registry = MetricsRegistry.get_instance()
-            counter = registry.get_metric(metric_name)
-            
-            # Create counter if it doesn't exist
-            if counter is None or not isinstance(counter, Counter):
-                counter = registry.create_counter(metric_name)
-                
             try:
-                return func(*args, **kwargs)
+                # Execute function
+                result = func(*args, **kwargs)
+                metric_labels["status"] = "success"
+                return result
             except Exception as e:
-                # Increment error counter
-                error_labels = dict(labels or {})
-                error_labels["error_type"] = e.__class__.__name__
-                counter.inc(labels=error_labels)
+                metric_labels["status"] = "error"
+                metric_labels["error_type"] = type(e).__name__
                 raise
-                
+            finally:
+                # Record invocation count
+                metric_point = MetricPoint(
+                    name=metric_name,
+                    value=1.0,
+                    labels=metric_labels,
+                    metric_type=MetricType.COUNTER
+                )
+                app_metrics.record(metric_point)
+        
         return wrapper  # type: ignore
-    
     return decorator
 
 
-def initialize_metrics() -> None:
-    """Initialize the metrics system."""
-    # Get instances to ensure they're initialized
-    registry = MetricsRegistry.get_instance()
-    system_collector = SystemMetricsCollector.get_instance()
-    AppMetricsCollector.get_instance()  # Initialize but don't store reference
-    health_system = HealthCheckSystem.get_instance()
-    
-    # Register a basic system health check
-    system_check = SystemResourcesCheck()
-    health_system.register_check(system_check)
-    
-    # Start collectors
-    system_collector.start_collection()
-    registry.start_reporting()
-    health_system.start_checking()
-    
-    logging.getLogger("finflow.metrics").info("Metrics system initialized")
-
-
-def write_metrics_to_log(metrics_data: List[Dict[str, Any]]) -> None:
+def track_errors(
+    name: Optional[str] = None,
+    labels: Optional[Dict[str, str]] = None,
+    reraise: bool = True
+) -> Callable[[F], F]:
     """
-    Write metrics data to log file.
+    Decorator to track function errors.
     
     Args:
-        metrics_data: List of metric data dictionaries
+        name: Name of the metric (defaults to function name)
+        labels: Default labels to apply to metrics
+        reraise: Whether to reraise caught exceptions
+        
+    Returns:
+        Decorated function that records error metrics
     """
-    logger = logging.getLogger("finflow.metrics.report")
-    
-    # Group metrics by name
-    metrics_by_name: Dict[str, List[Dict[str, Any]]] = {}
-    
-    for metric in metrics_data:
-        name = metric["name"]
-        if name not in metrics_by_name:
-            metrics_by_name[name] = []
-        metrics_by_name[name].append(metric)
-    
-    # Log a summary of each metric
-    for name, points in metrics_by_name.items():
-        # For each unique set of labels, find the latest point
-        latest_by_labels: Dict[str, Dict[str, Any]] = {}
-        
-        for point in points:
-            labels_key = json.dumps(point["labels"], sort_keys=True)
+    def decorator(func: F) -> F:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            # Get metrics collector
+            app_metrics = AppMetricsCollector.get_instance()
             
-            if labels_key not in latest_by_labels or point["timestamp"] > latest_by_labels[labels_key]["timestamp"]:
-                latest_by_labels[labels_key] = point
+            # Generate metric name
+            metric_name = name or f"{func.__module__}.{func.__name__}_errors"
+            
+            # Prepare labels
+            metric_labels = dict(labels or {})
+            metric_labels["function"] = func.__name__
+            metric_labels["module"] = func.__module__
+            
+            try:
+                # Execute function
+                result = func(*args, **kwargs)
+                return result
+            except Exception as e:
+                # Record error metric
+                metric_labels["error_type"] = type(e).__name__
+                metric_labels["error_message"] = str(e)[:100]  # Truncate error message
+                
+                metric_point = MetricPoint(
+                    name=metric_name,
+                    value=1.0,
+                    labels=metric_labels,
+                    metric_type=MetricType.COUNTER
+                )
+                app_metrics.record(metric_point)
+                
+                if reraise:
+                    raise
+                else:
+                    # Log error instead of reraising
+                    logger = logging.getLogger(f"finflow.metrics.{func.__module__}")
+                    logger.error(f"Error in {func.__name__}: {e}")
+                    return None
         
-        # Log each unique point
-        for point in latest_by_labels.values():
-            labels_str = ", ".join(f"{k}={v}" for k, v in point["labels"].items())
-            logger.info(f"Metric: {name} = {point['value']} [{labels_str}]")
+        return wrapper  # type: ignore
+    return decorator
+
+
+# -----------------------------------------------------------------------------
+# Global Metrics Instance
+# -----------------------------------------------------------------------------
+
+# Create global metrics instances for easy access
+metrics_registry = MetricsRegistry.get_instance()
+system_metrics = SystemMetricsCollector.get_instance()
+app_metrics = AppMetricsCollector.get_instance()
